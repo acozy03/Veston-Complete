@@ -5,6 +5,7 @@ import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
+import AuthGate from "@/components/auth-gate"
 
 export const metadata: Metadata = {
   title: "Veston | Radiology Assistant",
@@ -29,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           disableTransitionOnChange
           storageKey="veston-theme"
         >
-          {children}
+          <AuthGate>{children}</AuthGate>
           <Analytics />
         </ThemeProvider>
       </body>

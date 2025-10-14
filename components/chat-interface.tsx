@@ -27,39 +27,12 @@ const generateId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`
 
-const INITIAL_CHATS: Chat[] = [
-  {
-    id: "1",
-    title: "Getting Started with AI",
-    messages: [
-      {
-        id: "1",
-        role: "user",
-        content: "What is artificial intelligence?",
-        timestamp: new Date(Date.now() - 3600000),
-      },
-      {
-        id: "2",
-        role: "assistant",
-        content:
-          "Artificial Intelligence (AI) refers to the simulation of human intelligence in machines that are programmed to think and learn like humans. It encompasses various technologies including machine learning, natural language processing, and computer vision.",
-        timestamp: new Date(Date.now() - 3500000),
-      },
-    ],
-    createdAt: new Date(Date.now() - 86400000),
-  },
-  {
-    id: "2",
-    title: "Web Development Tips",
-    messages: [],
-    createdAt: new Date(Date.now() - 172800000),
-  },
-]
+const INITIAL_CHATS: Chat[] = []
 
 export default function ChatInterface() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [chats, setChats] = useState<Chat[]>(INITIAL_CHATS)
-  const [currentChatId, setCurrentChatId] = useState<string>(INITIAL_CHATS[0]?.id ?? "1")
+  const [currentChatId, setCurrentChatId] = useState<string>("")
   const [isTyping, setIsTyping] = useState(false)
 
   const currentChat = chats.find((chat) => chat.id === currentChatId)
@@ -76,7 +49,17 @@ export default function ChatInterface() {
   }
 
   const handleSendQuestion = async (question: string) => {
-    if (!currentChat) return
+    let activeChat = currentChat
+    if (!activeChat) {
+      activeChat = {
+        id: generateId(),
+        title: "New Chat",
+        messages: [],
+        createdAt: new Date(),
+      }
+      setChats([activeChat, ...chats])
+      setCurrentChatId(activeChat.id)
+    }
 
     const timestamp = new Date()
     const userMessage: Message = {
@@ -86,11 +69,11 @@ export default function ChatInterface() {
       timestamp,
     }
 
-    const updatedMessages = [...currentChat.messages, userMessage]
+    const updatedMessages = [...(activeChat?.messages ?? []), userMessage]
 
     setChats((prevChats) =>
       prevChats.map((chat) => {
-        if (chat.id === currentChatId) {
+        if (chat.id === (activeChat?.id ?? currentChatId)) {
           const nextTitle =
             chat.messages.length === 0 ? question.slice(0, 30) + (question.length > 30 ? "..." : "") : chat.title
           return {
@@ -146,7 +129,7 @@ export default function ChatInterface() {
 
       setChats((prevChats) =>
         prevChats.map((chat) =>
-          chat.id === currentChatId
+          chat.id === (activeChat?.id ?? currentChatId)
             ? {
                 ...chat,
                 messages: [...chat.messages, assistantMessage],
@@ -167,7 +150,7 @@ export default function ChatInterface() {
 
       setChats((prevChats) =>
         prevChats.map((chat) =>
-          chat.id === currentChatId
+          chat.id === (activeChat?.id ?? currentChatId)
             ? {
                 ...chat,
                 messages: [...chat.messages, assistantMessage],

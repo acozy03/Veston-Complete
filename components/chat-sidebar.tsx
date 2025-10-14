@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "./ui/button"
 import { ScrollArea } from "./ui/scroll-area"
 import { Input } from "./ui/input"
@@ -9,6 +9,7 @@ import { Plus, MessageSquare, Trash2, X, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Chat } from "./chat-interface"
 import { ThemeToggle } from "./theme-toggle"
+import { createClient } from "@/lib/supabase/client"
 
 interface ChatSidebarProps {
   chats: Chat[]
@@ -54,6 +55,35 @@ export function ChatSidebar({
   onToggle,
 }: ChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [userName, setUserName] = useState<string>("")
+  const [userEmail, setUserEmail] = useState<string>("")
+  const [avatarUrl, setAvatarUrl] = useState<string>("")
+
+  useEffect(() => {
+    const supabase = createClient()
+
+    const load = async () => {
+      const { data } = await supabase.auth.getUser()
+      const u = data.user
+      if (u) {
+        const meta = (u.user_metadata || {}) as Record<string, unknown>
+        const name = String(meta.name || meta.full_name || "")
+        const picture = String(meta.picture || meta.avatar_url || "")
+        setUserName(name || u.email || "")
+        setUserEmail(u.email || "")
+        setAvatarUrl(picture)
+      }
+    }
+
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      void load()
+    })
+    void load()
+
+    return () => {
+      sub.subscription.unsubscribe()
+    }
+  }, [])
 
   const filteredChats = chats
     .map((chat) => {
@@ -155,12 +185,22 @@ export function ChatSidebar({
 
         <div className="border-t border-sidebar-border p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-accent text-sm font-medium text-sidebar-accent-foreground">
-              U
-            </div>
+            {avatarUrl ? (
+              <Image
+                src={avatarUrl}
+                alt={userName || userEmail || "User"}
+                width={32}
+                height={32}
+                className="h-8 w-8 rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-accent text-sm font-medium text-sidebar-accent-foreground">
+                {(userName || userEmail || "U").slice(0, 1).toUpperCase()}
+              </div>
+            )}
             <div className="flex-1 overflow-hidden">
-              <p className="truncate text-sm font-medium text-sidebar-foreground">User</p>
-              <p className="truncate text-xs text-sidebar-foreground/60">user@example.com</p>
+              <p className="truncate text-sm font-medium text-sidebar-foreground">{userName || ""}</p>
+              <p className="truncate text-xs text-sidebar-foreground/60">{userEmail || ""}</p>
             </div>
           </div>
         </div>
