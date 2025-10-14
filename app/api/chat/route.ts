@@ -82,6 +82,17 @@ export async function POST(req: Request) {
       effectiveChatId = chatInsert.id as string
     }
 
+    // Ensure chat title is updated from default on first message
+    try {
+      const { data: chatRow } = await supabase.from('chats').select('id, title').eq('id', effectiveChatId).single()
+      const desiredTitle = question.length > 30 ? question.slice(0, 30) + '...' : question
+      if (chatRow && (!chatRow.title || chatRow.title === 'New Chat')) {
+        await supabase.from('chats').update({ title: desiredTitle }).eq('id', effectiveChatId)
+      }
+    } catch (e) {
+      // non-fatal
+    }
+
     // Insert user message
     const { data: msgInsert, error: msgErr } = await supabase
       .from('messages')
@@ -105,7 +116,7 @@ export async function POST(req: Request) {
       console.error('Failed to fetch context', ctxErr)
     }
 
-    // Rewrite question based on context; optionally ask for clarification
+    // Rewrite question based on context; capture possible clarifying question but do not use it yet
     const rewriteSystem = `You rewrite user questions using the provided conversation context.
 If the question is ambiguous or missing key details, set needs_clarification=true and provide a concise clarifying_question.
 Otherwise, produce the clearest possible effective_question that incorporates relevant context.
@@ -178,21 +189,6 @@ Return strictly in the given JSON schema.`
       }))
       await supabase.from('message_contexts').insert(rows)
     }
-
-    // If clarification is needed, return a clarifying question without calling n8n
-    if (needsClarification && clarifyingQuestion) {
-      // Save assistant clarifying message
-      await supabase
-        .from('messages')
-        .insert({ chat_id: effectiveChatId, role: 'assistant', content: clarifyingQuestion })
-
-      return NextResponse.json({
-        reply: clarifyingQuestion,
-        workflow: 'clarification',
-        classifier: null,
-        chatId: effectiveChatId,
-      })
-    }
     console.log(CLASSIFICATION_GUIDELINES)
     const classifierResponse = await client.responses.create({
   model: "gpt-4.1-mini",
@@ -227,6 +223,37 @@ Return strictly in the given JSON schema.`
 
     if (!workflowUrl) {
       return NextResponse.json({ error: `No workflow URL configured for label ${label}` }, { status: 500 })
+    }
+
+    // Only ask for clarification when classifier confidence is low
+    const normalizeConfidence = (c?: string): number => {
+      if (!c) return 0.5
+      const n = parseFloat(c)
+      if (!Number.isNaN(n)) {
+        // Treat values in 0-1 as-is, 0-100 as percentage
+        if (n > 1 && n <= 100) return Math.max(0, Math.min(1, n / 100))
+        return Math.max(0, Math.min(1, n))
+      }
+      const lc = c.toLowerCase()
+      if (lc.includes('low')) return 0.25
+      if (lc.includes('medium')) return 0.55
+      if (lc.includes('high')) return 0.85
+      return 0.5
+    }
+    const confidenceScore = normalizeConfidence(classifierResult?.confidence)
+    const LOW_CONFIDENCE_THRESHOLD = 0.6
+    if (confidenceScore < LOW_CONFIDENCE_THRESHOLD) {
+      const ask = clarifyingQuestion || 'Could you share a bit more detail so I can route this correctly?'
+      await supabase
+        .from('messages')
+        .insert({ chat_id: effectiveChatId, role: 'assistant', content: ask })
+
+      return NextResponse.json({
+        reply: ask,
+        workflow: 'clarification',
+        classifier: classifierResult,
+        chatId: effectiveChatId,
+      })
     }
 
     const workflowResponse = await fetch(workflowUrl, {

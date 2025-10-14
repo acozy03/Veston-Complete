@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Button } from "./ui/button"
 import { ScrollArea } from "./ui/scroll-area"
 import { Input } from "./ui/input"
@@ -9,7 +9,6 @@ import { Plus, MessageSquare, Trash2, X, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Chat } from "./chat-interface"
 import { ThemeToggle } from "./theme-toggle"
-import { createClient } from "@/lib/supabase/client"
 
 interface ChatSidebarProps {
   chats: Chat[]
@@ -19,6 +18,9 @@ interface ChatSidebarProps {
   onDeleteChat: (chatId: string) => void
   isOpen: boolean
   onToggle: () => void
+  userName?: string
+  userEmail?: string
+  avatarUrl?: string
 }
 
 function searchInChat(chat: Chat, query: string): { matches: boolean; snippet?: string } {
@@ -53,37 +55,12 @@ export function ChatSidebar({
   onDeleteChat,
   isOpen,
   onToggle,
+  userName = "",
+  userEmail = "",
+  avatarUrl = "",
 }: ChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")
-  const [userName, setUserName] = useState<string>("")
-  const [userEmail, setUserEmail] = useState<string>("")
-  const [avatarUrl, setAvatarUrl] = useState<string>("")
-
-  useEffect(() => {
-    const supabase = createClient()
-
-    const load = async () => {
-      const { data } = await supabase.auth.getUser()
-      const u = data.user
-      if (u) {
-        const meta = (u.user_metadata || {}) as Record<string, unknown>
-        const name = String(meta.name || meta.full_name || "")
-        const picture = String(meta.picture || meta.avatar_url || "")
-        setUserName(name || u.email || "")
-        setUserEmail(u.email || "")
-        setAvatarUrl(picture)
-      }
-    }
-
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      void load()
-    })
-    void load()
-
-    return () => {
-      sub.subscription.unsubscribe()
-    }
-  }, [])
+  
 
   const filteredChats = chats
     .map((chat) => {

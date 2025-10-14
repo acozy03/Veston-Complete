@@ -30,17 +30,30 @@ const generateId = () =>
 
 const INITIAL_CHATS: Chat[] = []
 
-export default function ChatInterface() {
+type ChatInterfaceProps = {
+  initialChats?: Chat[]
+  initialChatId?: string
+  initialMessages?: Message[]
+  user?: { name?: string; email?: string; avatarUrl?: string }
+}
+
+export default function ChatInterface({ initialChats = [], initialChatId = "", initialMessages = [], user }: ChatInterfaceProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [chats, setChats] = useState<Chat[]>(INITIAL_CHATS)
-  const [currentChatId, setCurrentChatId] = useState<string>("")
+  const [chats, setChats] = useState<Chat[]>(
+    initialChatId && initialMessages.length
+      ? initialChats.map((c) => (c.id === initialChatId ? { ...c, messages: initialMessages } : c))
+      : initialChats.length
+        ? initialChats
+        : INITIAL_CHATS,
+  )
+  const [currentChatId, setCurrentChatId] = useState<string>(initialChatId || "")
   const [isTyping, setIsTyping] = useState(false)
-  const [serverChatId, setServerChatId] = useState<string>("")
+  const [serverChatId, setServerChatId] = useState<string>(initialChatId || "")
   const [userId, setUserId] = useState<string>("")
 
   const supabase = useMemo(() => createClient(), [])
 
-  // Load chats on mount
+  // Load chats on mount if none provided
   useEffect(() => {
     const load = async () => {
       // Ensure we know the authed user id for client-side inserts
@@ -49,26 +62,28 @@ export default function ChatInterface() {
         if (u?.user?.id) setUserId(u.user.id)
       } catch {}
 
-      const { data, error } = await supabase
-        .from("chats")
-        .select("id, title, created_at, updated_at")
-        .order("updated_at", { ascending: false })
-      if (error) {
-        // eslint-disable-next-line no-console
-        console.error("Failed to load chats", error)
-        return
-      }
-      const mapped: Chat[] = (data || []).map((c) => ({
-        id: c.id as string,
-        title: (c.title as string) || "New Chat",
-        messages: [],
-        createdAt: new Date(c.created_at as string),
-      }))
-      setChats(mapped)
-      if (mapped[0]?.id) {
-        setCurrentChatId(mapped[0].id)
-        setServerChatId(mapped[0].id)
-        await loadMessages(mapped[0].id)
+      if (chats.length === 0) {
+        const { data, error } = await supabase
+          .from("chats")
+          .select("id, title, created_at, updated_at")
+          .order("updated_at", { ascending: false })
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.error("Failed to load chats", error)
+          return
+        }
+        const mapped: Chat[] = (data || []).map((c) => ({
+          id: c.id as string,
+          title: (c.title as string) || "New Chat",
+          messages: [],
+          createdAt: new Date(c.created_at as string),
+        }))
+        setChats(mapped)
+        if (mapped[0]?.id) {
+          setCurrentChatId(mapped[0].id)
+          setServerChatId(mapped[0].id)
+          await loadMessages(mapped[0].id)
+        }
       }
     }
     void load()
@@ -314,6 +329,9 @@ export default function ChatInterface() {
         onDeleteChat={handleDeleteChat}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
+        userName={user?.name}
+        userEmail={user?.email}
+        avatarUrl={user?.avatarUrl}
       />
 
       <div className="flex flex-1 flex-col">
