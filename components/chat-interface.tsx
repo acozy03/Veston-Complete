@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { ChatSidebar } from "./chat-sidebar"
 import { ChatMessages } from "./chat-messages"
 import { ChatInput } from "./chat-input"
 import { Button } from "./ui/button"
 import { Menu } from "lucide-react"
 import { ThemeToggle } from "./theme-toggle"
+import { createClient } from "@/lib/supabase/client"
 
 export type Message = {
   id: string
@@ -34,31 +35,132 @@ export default function ChatInterface() {
   const [chats, setChats] = useState<Chat[]>(INITIAL_CHATS)
   const [currentChatId, setCurrentChatId] = useState<string>("")
   const [isTyping, setIsTyping] = useState(false)
+  const [serverChatId, setServerChatId] = useState<string>("")
+  const [userId, setUserId] = useState<string>("")
+
+  const supabase = useMemo(() => createClient(), [])
+
+  // Load chats on mount
+  useEffect(() => {
+    const load = async () => {
+      // Ensure we know the authed user id for client-side inserts
+      try {
+        const { data: u } = await supabase.auth.getUser()
+        if (u?.user?.id) setUserId(u.user.id)
+      } catch {}
+
+      const { data, error } = await supabase
+        .from("chats")
+        .select("id, title, created_at, updated_at")
+        .order("updated_at", { ascending: false })
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to load chats", error)
+        return
+      }
+      const mapped: Chat[] = (data || []).map((c) => ({
+        id: c.id as string,
+        title: (c.title as string) || "New Chat",
+        messages: [],
+        createdAt: new Date(c.created_at as string),
+      }))
+      setChats(mapped)
+      if (mapped[0]?.id) {
+        setCurrentChatId(mapped[0].id)
+        setServerChatId(mapped[0].id)
+        await loadMessages(mapped[0].id)
+      }
+    }
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const loadMessages = async (chatId: string) => {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, role, content, created_at")
+      .eq("chat_id", chatId)
+      .order("created_at", { ascending: true })
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to load messages", error)
+      return
+    }
+    const msgs: Message[] = (data || []).map((m) => ({
+      id: m.id as string,
+      role: (m.role as "user" | "assistant" | "system" | "tool") === "assistant" ? "assistant" : "user",
+      content: m.content as string,
+      timestamp: new Date(m.created_at as string),
+    }))
+    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, messages: msgs } : c)))
+  }
 
   const currentChat = chats.find((chat) => chat.id === currentChatId)
 
-  const handleNewChat = () => {
-    const newChat: Chat = {
-      id: generateId(),
-      title: "New Chat",
-      messages: [],
-      createdAt: new Date(),
+  // Load messages when switching chats
+  useEffect(() => {
+    if (currentChatId) {
+      setServerChatId(currentChatId)
+      void loadMessages(currentChatId)
     }
-    setChats([newChat, ...chats])
-    setCurrentChatId(newChat.id)
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentChatId])
 
-  const handleSendQuestion = async (question: string) => {
-    let activeChat = currentChat
-    if (!activeChat) {
-      activeChat = {
+  const handleNewChat = async () => {
+    const { data, error } = userId
+      ? await supabase
+          .from("chats")
+          .insert({ title: "New Chat", user_id: userId })
+          .select("id, title, created_at")
+          .single()
+      : { data: null, error: new Error("No user id available") as any }
+    if (error || !data) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to create chat", error)
+      // Fallback to local-only chat if needed
+      const local: Chat = {
         id: generateId(),
         title: "New Chat",
         messages: [],
         createdAt: new Date(),
       }
+      setChats([local, ...chats])
+      setCurrentChatId(local.id)
+      setServerChatId("")
+      return
+    }
+    const created: Chat = {
+      id: data.id as string,
+      title: (data.title as string) || "New Chat",
+      messages: [],
+      createdAt: new Date(data.created_at as string),
+    }
+    setChats((prev) => [created, ...prev])
+    setCurrentChatId(created.id)
+    setServerChatId(created.id)
+  }
+
+  const handleSendQuestion = async (question: string) => {
+    let activeChat = currentChat
+    if (!activeChat) {
+      // Create chat in DB if none selected
+      const { data, error } = userId
+        ? await supabase
+            .from("chats")
+            .insert({ title: "New Chat", user_id: userId })
+            .select("id, title, created_at")
+            .single()
+        : { data: null, error: new Error("No user id available") as any }
+      const createdId = data?.id as string | undefined
+      activeChat = {
+        id: createdId || generateId(),
+        title: (data?.title as string) || "New Chat",
+        messages: [],
+        createdAt: new Date((data?.created_at as string) || Date.now()),
+      }
       setChats([activeChat, ...chats])
       setCurrentChatId(activeChat.id)
+      if (createdId) setServerChatId(createdId)
     }
 
     const timestamp = new Date()
@@ -74,8 +176,12 @@ export default function ChatInterface() {
     setChats((prevChats) =>
       prevChats.map((chat) => {
         if (chat.id === (activeChat?.id ?? currentChatId)) {
-          const nextTitle =
-            chat.messages.length === 0 ? question.slice(0, 30) + (question.length > 30 ? "..." : "") : chat.title
+          const isFirst = chat.messages.length === 0
+          const nextTitle = isFirst ? question.slice(0, 30) + (question.length > 30 ? "..." : "") : chat.title
+          // Persist title on first message
+          if (isFirst) {
+            void supabase.from("chats").update({ title: nextTitle }).eq("id", chat.id)
+          }
           return {
             ...chat,
             messages: updatedMessages,
@@ -95,7 +201,8 @@ export default function ChatInterface() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ question, history: historyPayload }),
+        // Only send chatId if we know the server-side id
+        body: JSON.stringify({ question, history: historyPayload, chatId: serverChatId || undefined }),
       })
 
       const responseText = await response.text()
@@ -137,6 +244,21 @@ export default function ChatInterface() {
             : chat,
         ),
       )
+
+      // Capture server chat id if provided
+      try {
+        const parsedJson = typeof parsed === "object" && parsed !== null ? (parsed as any) : null
+        const returnedChatId = parsedJson?.chatId
+        if (typeof returnedChatId === "string" && returnedChatId) {
+          setServerChatId(returnedChatId)
+        }
+      } catch {}
+
+      // Reload messages from DB using the server chat id if available
+      const idToLoad = (typeof parsed === "object" && parsed !== null && (parsed as any).chatId) || serverChatId
+      if (typeof idToLoad === "string" && idToLoad) {
+        void loadMessages(idToLoad)
+      }
     } catch (error) {
       const fallbackMessage =
         error instanceof Error ? `Sorry, something went wrong: ${error.message}` : "Sorry, something went wrong."
@@ -164,11 +286,22 @@ export default function ChatInterface() {
   }
 
   const handleDeleteChat = (chatId: string) => {
-    const updatedChats = chats.filter((chat) => chat.id !== chatId)
-    setChats(updatedChats)
-    if (currentChatId === chatId && updatedChats.length > 0) {
-      setCurrentChatId(updatedChats[0].id)
+    const run = async () => {
+      try {
+        await supabase.from("chats").delete().eq("id", chatId)
+      } catch {}
+      const updatedChats = chats.filter((chat) => chat.id !== chatId)
+      setChats(updatedChats)
+      if (currentChatId === chatId && updatedChats.length > 0) {
+        setCurrentChatId(updatedChats[0].id)
+        setServerChatId(updatedChats[0].id)
+        void loadMessages(updatedChats[0].id)
+      } else if (updatedChats.length === 0) {
+        setCurrentChatId("")
+        setServerChatId("")
+      }
     }
+    void run()
   }
 
   return (

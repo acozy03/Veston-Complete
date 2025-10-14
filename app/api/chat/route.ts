@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import OpenAI from "openai"
+import { createServerSupabase } from "@/lib/supabase/server"
 
 const GOOGLE_BUCKET_URL =
   process.env.N8N_GOOGLE_BUCKET_SCRAPER_URL ??
@@ -36,8 +37,15 @@ interface ClassifierResult {
 
 export async function POST(req: Request) {
   try {
-    const { question, history = [] }: { question?: string; history?: Array<{ role: string; content: string }> } =
-      await req.json()
+    const {
+      question,
+      history = [],
+      chatId,
+    }: {
+      question?: string
+      history?: Array<{ role: string; content: string }>
+      chatId?: string
+    } = await req.json()
 
     if (!question || !question.trim()) {
       return NextResponse.json({ error: "Question is required" }, { status: 400 })
@@ -48,7 +56,143 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 })
     }
 
+    // Identify the signed-in user (RLS)
+    const supabase = await createServerSupabase()
+    const { data: userRes, error: userErr } = await supabase.auth.getUser()
+    if (userErr || !userRes?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    const user = userRes.user
+
     const client = new OpenAI({ apiKey })
+
+    // Create or retrieve chat row
+    let effectiveChatId = chatId
+    if (!effectiveChatId) {
+      const title = question.length > 30 ? question.slice(0, 30) + "..." : question
+      const { data: chatInsert, error: chatErr } = await supabase
+        .from('chats')
+        .insert({ user_id: user.id, title })
+        .select('id')
+        .single()
+      if (chatErr) {
+        console.error('Failed to create chat', chatErr)
+        return NextResponse.json({ error: "Failed to create chat" }, { status: 500 })
+      }
+      effectiveChatId = chatInsert.id as string
+    }
+
+    // Insert user message
+    const { data: msgInsert, error: msgErr } = await supabase
+      .from('messages')
+      .insert({ chat_id: effectiveChatId, role: 'user', content: question })
+      .select('id, created_at')
+      .single()
+    if (msgErr) {
+      console.error('Failed to insert message', msgErr)
+      return NextResponse.json({ error: "Failed to insert message" }, { status: 500 })
+    }
+    const userMessageId = msgInsert.id as string
+
+    // Fetch recent context from this chat (memory)
+    const { data: contextMessages, error: ctxErr } = await supabase
+      .from('messages')
+      .select('id, role, content, created_at')
+      .eq('chat_id', effectiveChatId)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    if (ctxErr) {
+      console.error('Failed to fetch context', ctxErr)
+    }
+
+    // Rewrite question based on context; optionally ask for clarification
+    const rewriteSystem = `You rewrite user questions using the provided conversation context.
+If the question is ambiguous or missing key details, set needs_clarification=true and provide a concise clarifying_question.
+Otherwise, produce the clearest possible effective_question that incorporates relevant context.
+Return strictly in the given JSON schema.`
+
+    const rewriteSchema = {
+      type: 'object',
+      properties: {
+        effective_question: { type: 'string' },
+        needs_clarification: { type: 'boolean' },
+        clarifying_question: { type: 'string' },
+      },
+      required: ['effective_question', 'needs_clarification', 'clarifying_question'],
+      additionalProperties: false,
+    } as const
+
+    const contextText = (contextMessages ?? [])
+      .slice() // copy
+      .reverse() // oldest first
+      .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+      .join('\n')
+
+    const rewriteResp = await client.responses.create({
+      model: 'gpt-4.1-mini',
+      input: [
+        { role: 'system', content: rewriteSystem },
+        { role: 'user', content: `Context:\n${contextText}\n\nQuestion: ${question}` },
+      ],
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'rewrite_schema',
+          schema: rewriteSchema,
+          strict: true,
+        },
+      },
+    })
+
+    const rewriteRaw = rewriteResp.output_text
+    let effectiveQuestion = question
+    let needsClarification = false
+    let clarifyingQuestion = ''
+
+    if (rewriteRaw) {
+      try {
+        const parsed = JSON.parse(rewriteRaw) as {
+          effective_question: string
+          needs_clarification: boolean
+          clarifying_question?: string
+        }
+        effectiveQuestion = parsed.effective_question || question
+        needsClarification = !!parsed.needs_clarification
+        clarifyingQuestion = parsed.clarifying_question || ''
+      } catch (e) {
+        console.warn('Failed to parse rewrite JSON; proceeding with original question')
+      }
+    }
+
+    // Persist rewrite and context links
+    if (effectiveQuestion !== question) {
+      await supabase
+        .from('message_rewrites')
+        .insert({ original_message_id: userMessageId, rewritten_content: effectiveQuestion, method: 'llm' })
+    }
+    if (contextMessages && contextMessages.length) {
+      const rows = contextMessages.map((m, idx) => ({
+        message_id: userMessageId,
+        context_message_id: m.id,
+        score: Math.max(0, 1 - idx * 0.05),
+      }))
+      await supabase.from('message_contexts').insert(rows)
+    }
+
+    // If clarification is needed, return a clarifying question without calling n8n
+    if (needsClarification && clarifyingQuestion) {
+      // Save assistant clarifying message
+      await supabase
+        .from('messages')
+        .insert({ chat_id: effectiveChatId, role: 'assistant', content: clarifyingQuestion })
+
+      return NextResponse.json({
+        reply: clarifyingQuestion,
+        workflow: 'clarification',
+        classifier: null,
+        chatId: effectiveChatId,
+      })
+    }
     console.log(CLASSIFICATION_GUIDELINES)
     const classifierResponse = await client.responses.create({
   model: "gpt-4.1-mini",
@@ -90,7 +234,7 @@ export async function POST(req: Request) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ question, history, classifier: classifierResult, timestamp: new Date().toISOString() }),
+      body: JSON.stringify({ question: effectiveQuestion, history, classifier: classifierResult, timestamp: new Date().toISOString() }),
     })
 
     const workflowText = await workflowResponse.text()
@@ -122,11 +266,29 @@ const reply =
   (obj?.message && typeof obj.message === "string" && obj.message) ||
   (obj?.response && typeof obj.response === "string" && obj.response) ||
   (typeof workflowText === "string" ? workflowText : JSON.stringify(workflowJson));
+    // Save assistant reply to messages
+    await supabase
+      .from('messages')
+      .insert({ chat_id: effectiveChatId, role: 'assistant', content: reply })
+
+    // Log workflow run
+    await supabase.from('workflow_runs').insert({
+      user_id: user.id,
+      chat_id: effectiveChatId,
+      message_id: userMessageId,
+      classifier_path: label,
+      payload: { question: effectiveQuestion, history },
+      status: 'succeeded',
+      llm_prompt: CLASSIFICATION_GUIDELINES,
+      llm_response: classifierResult as any,
+    })
+
     return NextResponse.json({
       reply,
       workflow: label,
       classifier: classifierResult,
       raw: workflowJson ?? workflowText,
+      chatId: effectiveChatId,
     })
     
   } catch (error) {
