@@ -1,0 +1,186 @@
+/* app/globals.css */
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Enable `dark:` variant when `.dark` is on <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* -----------------------------------------------------
+   Design tokens (scoped to <html>) — light & dark sets
+   ----------------------------------------------------- */
+html {
+  color-scheme: light;
+
+  --background: #f5f8ff;
+  --foreground: #12325a;
+
+  --card: #ffffff;
+  --card-foreground: #12325a;
+
+  --popover: #ffffff;
+  --popover-foreground: #12325a;
+
+  --primary: #4f8ddf;
+  --primary-foreground: #ffffff;
+
+  --secondary: #bed4f6;
+  --secondary-foreground: #12325a;
+
+  --muted: #dbe7fb;
+  --muted-foreground: #3f5a7e;
+
+  --accent: #e7f1ff;
+  --accent-foreground: #12325a;
+
+  --destructive: #d55b63;
+  --destructive-foreground: #ffffff;
+
+  --border: #c8d9f4;
+  --input: #e0ecfd;
+  --ring: #4f8ddf;
+
+  --radius: 0.75rem;
+
+  --sidebar: #ecf2ff;
+  --sidebar-foreground: #12325a;
+  --sidebar-primary: #4f8ddf;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #d2e2fb;
+  --sidebar-accent-foreground: #12325a;
+  --sidebar-border: #c8d9f4;
+  --sidebar-ring: #7aa8e8;
+
+  /* Charts (optional defaults) */
+  --chart-1: 210 80% 55%;
+  --chart-2: 160 65% 45%;
+  --chart-3: 35 90% 55%;
+  --chart-4: 280 70% 60%;
+  --chart-5: 340 70% 55%;
+}
+
+html.dark {
+  color-scheme: dark;
+
+  --background: #0c1a2e;
+  --foreground: #e4edfb;
+
+  --card: #122640;
+  --card-foreground: #e4edfb;
+
+  --popover: #122640;
+  --popover-foreground: #e4edfb;
+
+  --primary: #8bb7ff;
+  --primary-foreground: #081426;
+
+  --secondary: #1d3354;
+  --secondary-foreground: #dce6f6;
+
+  --muted: #1a2c48;
+  --muted-foreground: #8da8cf;
+
+  --accent: #1f3658;
+  --accent-foreground: #e4edfb;
+
+  --destructive: #c0656a;
+  --destructive-foreground: #fff3f3;
+
+  --border: #1a2c48;
+  --input: #1a2c48;
+  --ring: #8bb7ff;
+
+  --sidebar: #111f35;
+  --sidebar-foreground: #e4edfb;
+  --sidebar-primary: #8bb7ff;
+  --sidebar-primary-foreground: #0a1728;
+  --sidebar-accent: #1a2c48;
+  --sidebar-accent-foreground: #dce6f6;
+  --sidebar-border: #1a2c48;
+  --sidebar-ring: #6d96d5;
+
+  /* Charts (dark-optimized hues) */
+  --chart-1: 210 100% 70%;
+  --chart-2: 160 70% 55%;
+  --chart-3: 35 95% 60%;
+  --chart-4: 280 80% 70%;
+  --chart-5: 340 80% 65%;
+}
+
+/* -----------------------------------------------------
+   Map Tailwind tokens to CSS variables
+   ----------------------------------------------------- */
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+}
+
+/* -----------------------------------------------------
+   Base styles
+   ----------------------------------------------------- */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at top, color-mix(in oklab, var(--color-primary) 25%, transparent), transparent 55%),
+      linear-gradient(180deg, rgba(238, 244, 255, 0.95), rgba(245, 248, 255, 0.95));
+    background-attachment: fixed;
+  }
+
+  html.dark body {
+    background-image:
+      radial-gradient(circle at top, color-mix(in oklab, var(--color-primary) 25%, transparent), transparent 55%),
+      linear-gradient(180deg, rgba(12, 26, 46, 0.92), rgba(12, 26, 46, 0.92));
+  }
+}
