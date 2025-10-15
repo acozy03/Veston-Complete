@@ -42,9 +42,7 @@ export function ChatInput({ onSendQuestion }: ChatInputProps) {
     <div className="border-t border-border bg-background p-4">
       <div className="mx-auto max-w-3xl">
         <div className="relative flex items-end gap-2">
-          <Button variant="ghost" size="icon" className="mb-2 shrink-0 text-muted-foreground hover:text-foreground">
-            <Paperclip className="h-5 w-5" />
-          </Button>
+        
 
           <Textarea
             ref={textareaRef}

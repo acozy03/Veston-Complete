@@ -371,7 +371,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           <ThemeToggle />
         </header>
 
-        <ChatMessages messages={currentChat?.messages || []} isTyping={isTyping} />
+        <ChatMessages messages={currentChat?.messages || []} isTyping={isTyping} user={user} />
 
         <ChatInput onSendQuestion={handleSendQuestion} />
       </div>
