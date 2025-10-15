@@ -1,4 +1,4 @@
-import ChatInterface from "@/components/chat-interface"
+import ChatInterface from "@/components/chat-interface.client"
 import { createServerSupabase } from "@/lib/supabase/server"
 
 export default async function Home() {

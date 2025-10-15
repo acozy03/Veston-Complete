@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+   devIndicators: false,
   output: 'standalone',
   eslint: {
     ignoreDuringBuilds: true,
@@ -21,7 +22,7 @@ const nextConfig = {
       'pbs.twimg.com',
     ],
   },
-  devIndicators: false
+ 
 }
 
 export default nextConfig

@@ -5,10 +5,16 @@ import { useState } from "react"
 import { Button } from "./ui/button"
 import { ScrollArea } from "./ui/scroll-area"
 import { Input } from "./ui/input"
-import { Plus, MessageSquare, Trash2, X, Search } from "lucide-react"
+import { Plus, X, Search, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Chat } from "./chat-interface"
 import { ThemeToggle } from "./theme-toggle"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu"
 
 interface ChatSidebarProps {
   chats: Chat[]
@@ -27,21 +33,11 @@ function searchInChat(chat: Chat, query: string): { matches: boolean; snippet?: 
   const lowerQuery = query.toLowerCase()
 
   if (chat.title.toLowerCase().includes(lowerQuery)) {
-    return { matches: true }
+    return { matches: true, snippet: chat.preview }
   }
 
-  for (const message of chat.messages) {
-    if (message.content.toLowerCase().includes(lowerQuery)) {
-      const index = message.content.toLowerCase().indexOf(lowerQuery)
-      const start = Math.max(0, index - 20)
-      const end = Math.min(message.content.length, index + query.length + 40)
-
-      let snippet = message.content.slice(start, end)
-      if (start > 0) snippet = "..." + snippet
-      if (end < message.content.length) snippet = snippet + "..."
-
-      return { matches: true, snippet }
-    }
+  if (chat.preview && chat.preview.toLowerCase().includes(lowerQuery)) {
+    return { matches: true, snippet: chat.preview }
   }
 
   return { matches: false }
@@ -129,31 +125,50 @@ export function ChatSidebar({
                 <div
                   key={chat.id}
                   className={cn(
-                    "group relative flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-sidebar-accent",
+                    "flex w-[14rem] items-center rounded-lg px-2 pr-2 py-2 text-sm transition-colors hover:bg-sidebar-accent",
                     currentChatId === chat.id && "bg-sidebar-accent",
                   )}
                 >
                   <button
                     onClick={() => onSelectChat(chat.id)}
-                    className="flex flex-1 flex-col items-start gap-1 overflow-hidden text-left"
+                    className="min-w-0 flex-1 text-left"
                   >
-                    <div className="flex w-full items-center gap-2">
-                      <MessageSquare className="h-4 w-4 shrink-0 text-sidebar-foreground/60" />
-                      <span className="truncate text-sidebar-foreground">{chat.title}</span>
+                    <div className="min-w-0">
+                      <div className="min-w-0">
+                        <span className="block truncate text-sidebar-foreground">{chat.title}</span>
+                      </div>
+                      {(snippet || chat.preview) && (
+                        <p className="block truncate text-xs text-sidebar-foreground/50">{snippet || chat.preview}</p>
+                      )}
                     </div>
-                    {snippet && <p className="w-full truncate pl-6 text-xs text-sidebar-foreground/50">{snippet}</p>}
                   </button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onDeleteChat(chat.id)
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-sidebar-foreground/60" />
-                  </Button>
+                  <div className="ml-1 shrink-0">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Chat actions"
+                          className="h-5 w-5 rounded-md p-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-transparent"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" sideOffset={6} onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuItem
+                          className="text-sidebar-foreground/70 hover:text-red-500 focus:text-red-500"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            onDeleteChat(chat.id)
+                          }}
+                        >
+                          Delete chat
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               ))
             )}

@@ -21,6 +21,7 @@ export type Chat = {
   title: string
   messages: Message[]
   createdAt: Date
+  preview?: string
 }
 
 const generateId = () =>
@@ -79,6 +80,8 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           createdAt: new Date(c.created_at as string),
         }))
         setChats(mapped)
+        // Load a short preview (last message) for each chat to enable search/snippets
+        void loadPreviews(mapped)
         if (mapped[0]?.id) {
           setCurrentChatId(mapped[0].id)
           setServerChatId(mapped[0].id)
@@ -89,6 +92,25 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const loadPreviews = async (items: Chat[]) => {
+    await Promise.all(
+      items.map(async (c) => {
+        const { data } = await supabase
+          .from("messages")
+          .select("content, created_at")
+          .eq("chat_id", c.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (data?.content) {
+          const text = String(data.content)
+          const snippet = text.slice(0, 80) + (text.length > 80 ? "..." : "")
+          setChats((prev) => prev.map((x) => (x.id === c.id ? { ...x, preview: snippet } : x)))
+        }
+      }),
+    )
+  }
 
   const loadMessages = async (chatId: string) => {
     const { data, error } = await supabase
@@ -108,6 +130,12 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       timestamp: new Date(m.created_at as string),
     }))
     setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, messages: msgs } : c)))
+    // Update preview to latest
+    const last = msgs[msgs.length - 1]
+    if (last) {
+      const snippet = last.content.slice(0, 80) + (last.content.length > 80 ? "..." : "")
+      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, preview: snippet } : c)))
+    }
   }
 
   const currentChat = chats.find((chat) => chat.id === currentChatId)
