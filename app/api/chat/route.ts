@@ -117,10 +117,24 @@ export async function POST(req: Request) {
     }
 
     // Rewrite question based on context; capture possible clarifying question but do not use it yet
-    const rewriteSystem = `You rewrite user questions using the provided conversation context.
-If the question is ambiguous or missing key details, set needs_clarification=true and provide a concise clarifying_question.
-Otherwise, produce the clearest possible effective_question that incorporates relevant context.
-Return strictly in the given JSON schema.`
+    const rewriteSystem = `You resolve coreferences in the user's latest question using prior conversation context.
+
+Goal: Make the question self-contained by replacing ONLY referential terms (e.g., he, she, they, it, this, that, these, those, here, there, the company, the hospital, the facility, the model, the repo, etc.) with explicit entities from context.
+
+Strict rules:
+- DO NOT rephrase, reorder, add, or remove any other words.
+- Preserve original spelling, punctuation, and casing.
+- Replace only the referential tokens themselves. Keep the rest of the question identical.
+- If a reference has multiple plausible entities, set needs_clarification=true and ask a concise clarifying_question.
+- If there is no reference to resolve or no matching entity in context, return the original question unchanged with needs_clarification=false.
+
+Output must follow this JSON schema exactly:
+{
+  "resolved_question": "string",
+  "needs_clarification": boolean,
+  "clarifying_question": "string | null"
+}
+`
 
     const rewriteSchema = {
       type: 'object',
@@ -174,7 +188,7 @@ Return strictly in the given JSON schema.`
         console.warn('Failed to parse rewrite JSON; proceeding with original question')
       }
     }
-
+    console.log('Effective question:', effectiveQuestion, 'Needs clarification:', needsClarification, 'Clarifying question:', clarifyingQuestion)
     // Persist rewrite and context links
     if (effectiveQuestion !== question) {
       await supabase
