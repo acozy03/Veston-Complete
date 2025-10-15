@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "./ui/button"
 import { ScrollArea } from "./ui/scroll-area"
 import { Input } from "./ui/input"
@@ -14,6 +14,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog"
+import { SpotlightSearch } from "./spotlight-search"
 
 interface ChatSidebarProps {
   chats: Chat[]
@@ -54,15 +65,12 @@ export function ChatSidebar({
   userEmail = "",
   avatarUrl = "",
 }: ChatSidebarProps) {
-  const [searchQuery, setSearchQuery] = useState("")
-  
+  const [spotlightOpen, setSpotlightOpen] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  const filteredChats = chats
-    .map((chat) => {
-      const searchResult = searchInChat(chat, searchQuery)
-      return { chat, ...searchResult }
-    })
-    .filter((result) => !searchQuery || result.matches)
+  const displayChats = chats
+    .map((chat) => ({ chat, matches: true as const }))
 
   return (
     <>
@@ -105,26 +113,25 @@ export function ChatSidebar({
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sidebar-foreground/40" />
             <Input
               type="text"
-              placeholder="Search chats..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 w-full bg-sidebar-accent pl-9 text-sm text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+              placeholder="Search all chats"
+              readOnly
+              onFocus={() => setSpotlightOpen(true)}
+              onClick={() => setSpotlightOpen(true)}
+              className="h-9 w-full cursor-pointer bg-sidebar-accent pl-9 text-sm text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-1 focus-visible:ring-sidebar-ring"
             />
           </div>
         </div>
 
         <ScrollArea className="flex-1 px-3">
           <div className="space-y-1 pb-4">
-            {filteredChats.length === 0 ? (
-              <p className="px-3 py-8 text-center text-sm text-sidebar-foreground/60">
-                {searchQuery ? "No chats found" : "No chats yet"}
-              </p>
+            {displayChats.length === 0 ? (
+              <p className="px-3 py-8 text-center text-sm text-sidebar-foreground/60">No chats yet</p>
             ) : (
-              filteredChats.map(({ chat, snippet }) => (
+              displayChats.map(({ chat }) => (
                 <div
                   key={chat.id}
                   className={cn(
-                    "flex w-[14rem] items-center rounded-lg px-2 pr-2 py-2 text-sm transition-colors hover:bg-sidebar-accent",
+                    "flex w-[14.5rem] items-center rounded-lg px-2 pr-2 py-2 text-sm transition-colors hover:bg-sidebar-accent",
                     currentChatId === chat.id && "bg-sidebar-accent",
                   )}
                 >
@@ -136,9 +143,7 @@ export function ChatSidebar({
                       <div className="min-w-0">
                         <span className="block truncate text-sidebar-foreground">{chat.title}</span>
                       </div>
-                      {(snippet || chat.preview) && (
-                        <p className="block truncate text-xs text-sidebar-foreground/50">{snippet || chat.preview}</p>
-                      )}
+                      {/* Preview removed per request */}
                     </div>
                   </button>
                   <div className="ml-1 shrink-0">
@@ -160,7 +165,8 @@ export function ChatSidebar({
                           onClick={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            onDeleteChat(chat.id)
+                            setPendingDeleteId(chat.id)
+                            setConfirmOpen(true)
                           }}
                         >
                           Delete chat
@@ -183,6 +189,44 @@ export function ChatSidebar({
           </div>
         </div>
       </aside>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The chat and its messages will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingDeleteId) {
+                  onDeleteChat(pendingDeleteId)
+                }
+                setPendingDeleteId(null)
+                setConfirmOpen(false)
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Spotlight search modal */}
+      <SpotlightSearch
+        open={spotlightOpen}
+        onOpenChange={setSpotlightOpen}
+        chats={chats}
+        onSelectChat={(id) => {
+          onSelectChat(id)
+          setSpotlightOpen(false)
+        }}
+      />
+    
     </>
   )
 }
