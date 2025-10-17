@@ -136,7 +136,16 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       content: m.content as string,
       timestamp: new Date(m.created_at as string),
     }))
-    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, messages: msgs } : c)))
+    // Avoid wiping optimistic local messages if the server hasn't written any yet
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id !== chatId) return c
+        if (msgs.length === 0 && (c.messages?.length || 0) > 0) {
+          return c
+        }
+        return { ...c, messages: msgs }
+      }),
+    )
     // Update preview to latest
     const last = msgs[msgs.length - 1]
     if (last) {
@@ -192,6 +201,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
   const handleSendQuestion = async (question: string) => {
     let activeChat = currentChat
+    let requestChatId: string | undefined = serverChatId || undefined
     if (!activeChat) {
       // Create chat in DB if none selected
       const { data, error } = userId
@@ -202,6 +212,9 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
             .single()
         : { data: null, error: new Error("No user id available") as any }
       const createdId = data?.id as string | undefined
+      if (createdId) {
+        requestChatId = createdId
+      }
       activeChat = {
         id: createdId || generateId(),
         title: (data?.title as string) || "New Chat",
@@ -256,7 +269,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           "Content-Type": "application/json",
         },
         // Only send chatId if we know the server-side id
-        body: JSON.stringify({ question, history: historyPayload, chatId: serverChatId || undefined }),
+        body: JSON.stringify({ question, history: historyPayload, chatId: requestChatId }),
       })
 
       const responseText = await response.text()
@@ -299,11 +312,19 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         ),
       )
 
-      // Capture server chat id if provided
+      // Capture server chat id if provided and reconcile local temp chat
       try {
         const parsedJson = typeof parsed === "object" && parsed !== null ? (parsed as any) : null
-        const returnedChatId = parsedJson?.chatId
+        const returnedChatId = parsedJson?.chatId as string | undefined
         if (typeof returnedChatId === "string" && returnedChatId) {
+          // If we created a local chat first (no server id yet), replace its id with the server id
+          const localId = activeChat?.id ?? currentChatId
+          if (localId && localId !== returnedChatId) {
+            setChats((prev) =>
+              prev.map((c) => (c.id === localId ? { ...c, id: returnedChatId } : c)),
+            )
+            setCurrentChatId(returnedChatId)
+          }
           setServerChatId(returnedChatId)
         }
       } catch {}
