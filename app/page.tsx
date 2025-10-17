@@ -19,6 +19,7 @@ export default async function Home() {
       const { data: chats } = await supabase
         .from("chats")
         .select("id, title, created_at, updated_at")
+        .eq("user_email", u.email)
         .order("updated_at", { ascending: false })
       initialChats = (chats || []).map((c) => ({ id: c.id as string, title: (c.title as string) || "New Chat", createdAt: new Date(c.created_at as string) }))
       if (initialChats[0]?.id) {
@@ -27,6 +28,7 @@ export default async function Home() {
           .from("messages")
           .select("id, role, content, created_at")
           .eq("chat_id", initialChatId)
+          .eq("user_email", u.email)
           .order("created_at", { ascending: true })
         initialMessages = (msgs || []).map((m) => ({
           id: m.id as string,

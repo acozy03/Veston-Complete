@@ -51,6 +51,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const [isTyping, setIsTyping] = useState(false)
   const [serverChatId, setServerChatId] = useState<string>(initialChatId || "")
   const [userId, setUserId] = useState<string>("")
+  const [userEmail, setUserEmail] = useState<string>(user?.email || "")
 
   const supabase = useMemo(() => createClient(), [])
 
@@ -61,12 +62,16 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       try {
         const { data: u } = await supabase.auth.getUser()
         if (u?.user?.id) setUserId(u.user.id)
+        if (u?.user?.email) setUserEmail(u.user.email)
       } catch {}
 
       if (chats.length === 0) {
+        const { data: u2 } = await supabase.auth.getUser()
+        const emailForQuery = u2?.user?.email || userEmail || ""
         const { data, error } = await supabase
           .from("chats")
           .select("id, title, created_at, updated_at")
+          .eq("user_email", emailForQuery)
           .order("updated_at", { ascending: false })
         if (error) {
           // eslint-disable-next-line no-console
@@ -100,6 +105,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           .from("messages")
           .select("content, created_at")
           .eq("chat_id", c.id)
+          .eq("user_email", userEmail || "")
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle()
@@ -117,6 +123,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       .from("messages")
       .select("id, role, content, created_at")
       .eq("chat_id", chatId)
+      .eq("user_email", userEmail || "")
       .order("created_at", { ascending: true })
     if (error) {
       // eslint-disable-next-line no-console
@@ -153,7 +160,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     const { data, error } = userId
       ? await supabase
           .from("chats")
-          .insert({ title: "New Chat", user_id: userId })
+          .insert({ title: "New Chat", user_id: userId, user_email: userEmail || null })
           .select("id, title, created_at")
           .single()
       : { data: null, error: new Error("No user id available") as any }
@@ -190,7 +197,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       const { data, error } = userId
         ? await supabase
             .from("chats")
-            .insert({ title: "New Chat", user_id: userId })
+            .insert({ title: "New Chat", user_id: userId, user_email: userEmail || "" })
             .select("id, title, created_at")
             .single()
         : { data: null, error: new Error("No user id available") as any }
@@ -223,7 +230,11 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           const nextTitle = isFirst ? question.slice(0, 30) + (question.length > 30 ? "..." : "") : chat.title
           // Persist title on first message
           if (isFirst) {
-            void supabase.from("chats").update({ title: nextTitle }).eq("id", chat.id)
+            void supabase
+              .from("chats")
+              .update({ title: nextTitle })
+              .eq("id", chat.id)
+              .eq("user_email", userEmail || "")
           }
           return {
             ...chat,
@@ -331,7 +342,11 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const handleDeleteChat = (chatId: string) => {
     const run = async () => {
       try {
-        await supabase.from("chats").delete().eq("id", chatId)
+        await supabase
+          .from("chats")
+          .delete()
+          .eq("id", chatId)
+          .eq("user_email", userEmail || "")
       } catch {}
       const updatedChats = chats.filter((chat) => chat.id !== chatId)
       setChats(updatedChats)

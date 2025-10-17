@@ -66,13 +66,13 @@ export async function POST(req: Request) {
 
     const client = new OpenAI({ apiKey })
 
-    // Create or retrieve chat row
+    // Create or retrieve chat row (scoped by user email as well)
     let effectiveChatId = chatId
     if (!effectiveChatId) {
       const title = question.length > 30 ? question.slice(0, 30) + "..." : question
       const { data: chatInsert, error: chatErr } = await supabase
         .from('chats')
-        .insert({ user_id: user.id, title })
+        .insert({ user_id: user.id, user_email: user.email, title })
         .select('id')
         .single()
       if (chatErr) {
@@ -84,10 +84,19 @@ export async function POST(req: Request) {
 
     // Ensure chat title is updated from default on first message
     try {
-      const { data: chatRow } = await supabase.from('chats').select('id, title').eq('id', effectiveChatId).single()
+      const { data: chatRow } = await supabase
+        .from('chats')
+        .select('id, title')
+        .eq('id', effectiveChatId)
+        .eq('user_email', user.email)
+        .single()
       const desiredTitle = question.length > 30 ? question.slice(0, 30) + '...' : question
       if (chatRow && (!chatRow.title || chatRow.title === 'New Chat')) {
-        await supabase.from('chats').update({ title: desiredTitle }).eq('id', effectiveChatId)
+        await supabase
+          .from('chats')
+          .update({ title: desiredTitle })
+          .eq('id', effectiveChatId)
+          .eq('user_email', user.email)
       }
     } catch (e) {
       // non-fatal
@@ -96,7 +105,7 @@ export async function POST(req: Request) {
     // Insert user message
     const { data: msgInsert, error: msgErr } = await supabase
       .from('messages')
-      .insert({ chat_id: effectiveChatId, role: 'user', content: question })
+      .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'user', content: question })
       .select('id, created_at')
       .single()
     if (msgErr) {
@@ -110,6 +119,7 @@ export async function POST(req: Request) {
       .from('messages')
       .select('id, role, content, created_at')
       .eq('chat_id', effectiveChatId)
+      .eq('user_email', user.email)
       .order('created_at', { ascending: false })
       .limit(20)
     if (ctxErr) {
@@ -195,11 +205,12 @@ Output must follow this JSON schema exactly:
     if (effectiveQuestion !== question) {
       await supabase
         .from('message_rewrites')
-        .insert({ original_message_id: userMessageId, rewritten_content: effectiveQuestion, method: 'llm' })
+        .insert({ original_message_id: userMessageId, user_email: user.email, rewritten_content: effectiveQuestion, method: 'llm' })
     }
     if (contextMessages && contextMessages.length) {
       const rows = contextMessages.map((m, idx) => ({
         message_id: userMessageId,
+        user_email: user.email,
         context_message_id: m.id,
         score: Math.max(0, 1 - idx * 0.05),
       }))
@@ -262,7 +273,7 @@ Output must follow this JSON schema exactly:
       const ask = clarifyingQuestion || 'Could you share a bit more detail so I can route this correctly?'
       await supabase
         .from('messages')
-        .insert({ chat_id: effectiveChatId, role: 'assistant', content: ask })
+        .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: ask })
 
       return NextResponse.json({
         reply: ask,
@@ -320,11 +331,12 @@ if (Array.isArray(workflowJson)) {
     // Save assistant reply to messages
     await supabase
       .from('messages')
-      .insert({ chat_id: effectiveChatId, role: 'assistant', content: reply })
+      .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: reply })
 
     // Log workflow run
     await supabase.from('workflow_runs').insert({
       user_id: user.id,
+      user_email: user.email,
       chat_id: effectiveChatId,
       message_id: userMessageId,
       classifier_path: label,
