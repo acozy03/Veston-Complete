@@ -5,6 +5,7 @@ import Image from "next/image"
 import { ScrollArea } from "./ui/scroll-area"
 import { cn } from "@/lib/utils"
 import type { Message } from "./chat-interface"
+import ReactMarkdown from "react-markdown"
 
 interface ChatMessagesProps {
   messages: Message[]
@@ -51,7 +52,24 @@ export function ChatMessages({ messages, isTyping, user }: ChatMessagesProps) {
                     message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
                   )}
                 >
-                  <p className="whitespace-pre-wrap text-base leading-relaxed">{message.content}</p>
+                  <div className={cn(
+                    "text-base leading-relaxed break-words",
+                    // Ensure links are legible in both bubbles
+                    message.role === "user" ? "[&_a]:underline [&_a]:text-primary-foreground" : "[&_a]:underline [&_a]:text-foreground"
+                  )}>
+                    <ReactMarkdown
+                      components={{
+                        a: ({ node, ...props }) => (
+                          <a {...props} target="_blank" rel="noopener noreferrer" />
+                        ),
+                        p: ({ node, ...props }) => (
+                          <p className="whitespace-pre-wrap" {...props} />
+                        ),
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
                 </div>
 
                 {message.role === "user" && (

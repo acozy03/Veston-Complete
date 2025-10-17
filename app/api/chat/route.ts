@@ -122,11 +122,13 @@ export async function POST(req: Request) {
 Goal: Make the question self-contained by replacing ONLY referential terms (e.g., he, she, they, it, this, that, these, those, here, there, the company, the hospital, the facility, the model, the repo, etc.) with explicit entities from context.
 
 Strict rules:
+- If there is no reference to resolve or no matching entity in context, return the original question unchanged with needs_clarification=false.
+- DO NOT replace date or time references (e.g. DO NOT replace 'yesterday' or 'tomorrow' with the actual date).
 - DO NOT rephrase, reorder, add, or remove any other words.
 - Preserve original spelling, punctuation, and casing.
 - Replace only the referential tokens themselves. Keep the rest of the question identical.
 - If a reference has multiple plausible entities, set needs_clarification=true and ask a concise clarifying_question.
-- If there is no reference to resolve or no matching entity in context, return the original question unchanged with needs_clarification=false.
+- Only replace references with entities that are explicity mentioned and stated by the user.
 
 Output must follow this JSON schema exactly:
 {
@@ -302,11 +304,19 @@ const obj = (typeof workflowJson === "object" && workflowJson !== null
   ? (workflowJson as JsonRecord)
   : null);
 
-const reply =
-  (obj?.reply && typeof obj.reply === "string" && obj.reply) ||
-  (obj?.message && typeof obj.message === "string" && obj.message) ||
-  (obj?.response && typeof obj.response === "string" && obj.response) ||
-  (typeof workflowText === "string" ? workflowText : JSON.stringify(workflowJson));
+// Handle Google Bucket Scraper array payloads that contain a markdown `message` field
+let reply: string;
+if (Array.isArray(workflowJson)) {
+  const first = workflowJson[0] as JsonRecord | undefined;
+  const arrMessage = typeof first?.message === "string" ? (first!.message as string) : null;
+  reply = arrMessage || workflowText;
+} else {
+  reply =
+    (obj?.reply && typeof obj.reply === "string" && obj.reply) ||
+    (obj?.message && typeof obj.message === "string" && obj.message) ||
+    (obj?.response && typeof obj.response === "string" && obj.response) ||
+    (typeof workflowText === "string" ? workflowText : JSON.stringify(workflowJson));
+}
     // Save assistant reply to messages
     await supabase
       .from('messages')
