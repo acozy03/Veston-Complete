@@ -59,9 +59,19 @@ export function ChatMessages({ messages, isTyping, user }: ChatMessagesProps) {
                   )}>
                     <ReactMarkdown
                       components={{
-                        a: ({ node, ...props }) => (
-                          <a {...props} target="_blank" rel="noopener noreferrer" />
-                        ),
+                        a: ({ node, href, children, ...props }) => {
+                          const url = typeof href === 'string' ? href : ''
+                          const isXlsx = /\.xlsx(\?|$)/i.test(url) || /filename=.*\.xlsx/i.test(url) || /application%2Fvnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/i.test(url)
+                          if (isXlsx && url) {
+                            const previewUrl = `/preview/xlsx?src=${encodeURIComponent(url)}`
+                            return (
+                              <a href={previewUrl} target="_blank" rel="noopener noreferrer" {...props}>
+                                {children}
+                              </a>
+                            )
+                          }
+                          return <a href={url} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
+                        },
                         p: ({ node, ...props }) => (
                           <p className="whitespace-pre-wrap" {...props} />
                         ),
