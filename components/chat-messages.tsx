@@ -64,10 +64,13 @@ export function ChatMessages({ messages, isTyping, user }: ChatMessagesProps) {
                           const isXlsx = /\.xlsx(\?|$)/i.test(url) || /filename=.*\.xlsx/i.test(url) || /application%2Fvnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/i.test(url)
                           if (isXlsx && url) {
                             const previewUrl = `/preview/xlsx?src=${encodeURIComponent(url)}`
+                            const downloadUrl = `/api/proxy-file?src=${encodeURIComponent(url)}&download=1`
                             return (
-                              <a href={previewUrl} target="_blank" rel="noopener noreferrer" {...props}>
-                                {children}
-                              </a>
+                              <span>
+                                <a href={previewUrl} target="_blank" rel="noopener noreferrer" {...props}>Open preview</a>
+                                <span> · </span>
+                                <a href={downloadUrl} rel="noopener noreferrer">Download</a>
+                              </span>
                             )
                           }
                           return <a href={url} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>

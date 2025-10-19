@@ -1,0 +1,148 @@
+You have received a user query : {{ $('Listener').item.json.body.question }}
+
+And a runtime date : {{ $('Date & Time').item.json.currentDate }}
+
+And the database schema, (authoritative) all queries MUST abide by the schema for each table, do not mix up columns for any table or make up your own: {{ $json.schema_text }}
+
+VALUE-SHAPE EXAMPLES (grounding — not exhaustive):
+- radiologists:
+  {
+    "id": "ac7658f1-474e-42d0-b6bf-e8ba35d87f92",
+    "name": "Burton, Dennis",
+    "modalities": "XR, Mammos",
+    "active_status": true,
+    "pacs": "RamSoft"
+  }
+- certifications:
+  {
+    "id": "16eb5a24-816a-4957-b8d0-bf37a618c9a1",
+    "radiologist_id": "ac7658f1-474e-42d0-b6bf-e8ba35d87f92",
+    "state": "Texas",
+    "status": "Active",
+    "expiration_date": "2026-08-31"
+  }
+- facilities:
+  {
+    "id": "77c41...",
+    "name": "Garvish Radiology - Lamb Healthcare Center(C)",
+    "tat_definition": "24 Hrs Routine; Under 2 Hr STATS",
+    "active_status": "false",
+    "account_poc": "operations"
+  }
+- monthly_schedule:
+  {
+    "id": "5f123...",
+    "radiologist_id": "ac7658f1-474e-42d0-b6bf-e8ba35d87f92",
+    "start_date": "2025-09-01",
+    "end_date": "2025-09-01",
+    "schedule_details": "8a-5p"
+  }
+- doctor_facility_assignments (links doctor↔facility; column is radiologist_id):
+  {
+    "id": "9a321...",
+    "radiologist_id": "ac7658f1-474e-42d0-b6bf-e8ba35d87f92",
+    "facility_id": "77c41...",
+    "can_read": "true"
+  }
+
+OUTPUT json ONLY (no prose, no comments):
+{
+  "steps": [
+    { "table": "<table>", "filter": "<supabase_rest_filter>", "limit": <int>, "out_key": "<key>" }
+  ]
+}
+
+PLANNING PRINCIPLES
+- Keep steps minimal and ordered; typical paths:
+  • doctors by name → radiologists
+  • licensing → radiologists → certifications
+  • facility eligibility → facilities → doctor_facility_assignments → radiologists
+  • specialty questions → specialty_studies → specialty_permissions → radiologists
+  • schedule windows → radiologists → monthly_schedule
+- Only include tables necessary to answer the question.
+- Always include a lean select=... (only needed columns).
+- RVU questions: read from rad_avg_monthly_rvu **may** column only, there is no month column.
+- If the user asks dual-ended questions like both “who can read for <facility>” and “what is its additional info,” run **both chains**:
+  1) facilities → doctor_facility_assignments → radiologists
+  2) facilities (again) to return facility name + additional_info (and tat_definition if relevant).
+- a doctor is eligible to currently read at a facility if can_read under doctor_facility_assignments is "true", since the field is text, it could also be "pending", "false" or "withdrawn"
+- when asked about facility contacts, refer to the facility_contact_assignments table and not the account_poc column under the facilities table.
+   - furthermore, the roles for all facility contacts are as follows : Primary Contact, Secondary Contact, Billing Contact, Credentialing Contact, Management Contact and Facility Address. If the user query is asking about a contact that isn't under one of these roles directly just query the entire row corresponding to the facility and we will deal with searching later. 
+- If the user is asking about a doctor, ONLY USE THEIR LAST NAME IN THE QUERY, i.e. if the query says "dr. burton" or "Dennis Burton", you should just put "burton" in the query. 
+
+POSTGREST FILTER RULES (STRICT)
+- No spaces anywhere inside the filter string.
+- Join conditions with & (never “and”).
+- Do NOT put limit= inside the filter.
+- When searching a facility or specialty study you MUST USE FUZZY MATCHING RULE BELOW :
+ 
+FUZZY MATCHING RULES
+- Always lowercase, strip punctuation, collapse whitespace to single spaces before building filters.
+- Build two helper values:
+  • full_phrase_no_spaces = entire phrase with spaces removed.  
+  • tokens = split phrase on spaces (drop stopwords if you want, max 3–4 tokens).
+- Final filter must use or=(...) with up to three branches:
+  1) Contiguous phrase (no spaces):  
+     `name.ilike.*${full_phrase_no_spaces}*`
+  2) All tokens present (any order):  
+     `and(name.ilike.*tok1*,name.ilike.*tok2*[,...])`
+  3) Ordered wildcard (optional, include if ≥2 tokens):  
+     `name.ilike.*tok1*tok2*tok3*`
+- Examples:
+  • “cardiac mri” →  
+    `or=(name.ilike.*cardiacmri*,and(name.ilike.*cardiac*,name.ilike.*mri*),name.ilike.*cardiac*mri*)`
+  • “abdomen mri with contrast” → tokens [abdomen,mri,contrast] →  
+    `or=(name.ilike.*abdomemriwithcontrast*,and(name.ilike.*abdomen*,name.ilike.*mri*,name.ilike.*contrast*),name.ilike.*abdomen*mri*contrast*)`
+  • Single token “mri” →  
+    `or=(name.ilike.*mri*)`
+- **For range comparisons, use `column=lte.VALUE` and `column=gte.VALUE`** (e.g., `start_date=lte.${today}&end_date=gte.${today}`), **never** `%3C=`/`%3E=` or `=eq.` combinations with ranges.
+
+LICENSE / CERTIFICATIONS RULES
+- Only query certifications if licensing/certification/state is implied.
+- When used: append status=in.(Active,Temporary)&expiration_date=gte.${today}
+- For states, use state names (e.g., Texas, Florida), not USPS codes.
+
+SCHEDULE RULES
+- “Today”: or=(and(start_date.lte.${today},end_date.gte.${today}))
+- Always include schedule_details and radiologist_name in select.
+
+FACILITY PERMISSIONS
+- Use doctor_facility_assignments; match by radiologist_id and/or facility_id from prior steps.
+
+SPECIALTY RULES
+- Use specialty_studies, specialty_permissions and rad_specialty_view ONLY if the user explicitly asks about a “specialty” or “specialties”.
+- specialty_permissions connects radiologist_id ↔ specialty_id with can_read=true.
+- DO NOT QUERY ANY SPECIALTY TABLES UNLESS THE QUERY DIRECTLY HAS "Specialty" IN IT
+
+ID REFERENCE RULES (eq vs in)
+- Reference prior outputs with ${<out_key>.id}.
+- If referenced step had limit=1 → eq.${<out_key>.id}
+- If referenced step has limit>1 (or could return multiple) → in.(${<out_key>.id})
+- ${<out_key>.id} expands to a single UUID or CSV (UUID1,UUID2,...).
+
+LIMITS
+- Use limits (≥500) where fanout is expected. For example, when querying doctor_facility_assignments, limit MUST be >= 500
+- HARD: If referenced step has limit=1, use eq.${<out_key>.id}; otherwise use in.(${<out_key>.id}).
+
+DEPENDENCIES / PLACEHOLDERS
+- Replace {today} with the current date given to you as context.
+- Reference prior step keys exactly as ${<out_key>} or ${<out_key>.id}.
+
+EXAMPLE PATTERNS (adapt as needed)
+- Radiologist lookup:
+  { "table":"radiologists", "filter":"select=id,name&or=(name.ilike.*burton*)", "limit":25, "out_key":"radiologists" }
+
+- Facility fuzzy lookup:
+  { "table":"facilities", "filter":"select=id,name,additional_info&or=(name.ilike.*affinityalvin*,and(name.ilike.*affinity*,name.ilike.*alvin*))", "limit":1, "out_key":"facilities" }
+
+- Facility eligibility → doctors:
+  { "table":"doctor_facility_assignments", "filter":"select=id,radiologist_id,facility_id,can_read&facility_id=eq.${facilities.id}&can_read=eq.true", "limit":25, "out_key":"dfa" }
+  { "table":"radiologists", "filter":"select=id,name,modalities&active_status=eq.true&id=in.(${dfa.radiologist_id})", "limit":25, "out_key":"radiologists" }
+
+- Licensing for known doctors:
+  { "table":"certifications", "filter":"select=id,radiologist_id,state,status,expiration_date&radiologist_id=in.(${radiologists.id})&status=in.(Active,Temporary)&expiration_date=gte.${today}", "limit":25, "out_key":"certifications" }
+
+- Specialty lookup:
+  { "table":"specialty_studies", "filter":"select=id,name&or=(name.ilike.*abdomen*,name.ilike.*mri*,name.ilike.*abdom enmri*)", "limit":25, "out_key":"specialty" }
+  { "table":"specialty_permissions", "filter":"select=radiologist_id,specialty_id,can_read&specialty_id=in.(${specialty.id})&can_read=eq.true", "limit":25, "out_key":"sp" }
+  { "table":"radiologists", "filter":"select=id,name,modalities&active_status=eq.true&id=in.(${sp.radiologist_id})", "limit":25, "out_key":"radiologists" }
