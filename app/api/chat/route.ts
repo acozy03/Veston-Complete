@@ -66,7 +66,7 @@ export async function POST(req: Request) {
 
     const client = new OpenAI({ apiKey })
 
-    // Create or retrieve chat row (scoped by user email as well)
+    // Create or retrieve chat row (scoped by user)
     let effectiveChatId = chatId
     if (!effectiveChatId) {
       const title = question.length > 30 ? question.slice(0, 30) + "..." : question
