@@ -20,6 +20,14 @@ export function ChatMessages({ messages, isTyping, user }: ChatMessagesProps) {
     bottomRef.current?.scrollIntoView({ block: "end" })
   }, [messages.length, isTyping])
 
+  const formatTimestamp = (d?: Date) => {
+    if (!d || !(d instanceof Date) || Number.isNaN(d.getTime())) return ""
+    const now = new Date()
+    const isToday = d.toDateString() === now.toDateString()
+    const time = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(d)
+    return isToday ? time : `${time} • ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(d)}`
+  }
+
   return (
     <ScrollArea className="flex-1">
       <div className="mx-auto w-full max-w-5xl px-6 py-10">
@@ -45,6 +53,8 @@ export function ChatMessages({ messages, isTyping, user }: ChatMessagesProps) {
                     <Image src="/logo.png" alt="Assistant" width={48} height={48} className="h-12 w-12 object-cover" />
                   </div>
                 )}
+
+                <div className={cn("max-w-[85%] flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
 
                 <div
                   className={cn(
@@ -84,6 +94,18 @@ export function ChatMessages({ messages, isTyping, user }: ChatMessagesProps) {
                     </ReactMarkdown>
                   </div>
                 </div>
+
+                {message.timestamp && (
+                  <div
+                    className={cn(
+                      "mt-1 text-xs text-muted-foreground opacity-70",
+                      message.role === "user" ? "text-right" : "text-left",
+                    )}
+                  >
+                    {formatTimestamp(message.timestamp)}
+                  </div>
+                )}
+              </div>
 
                 {message.role === "user" && (
                   user?.avatarUrl ? (
