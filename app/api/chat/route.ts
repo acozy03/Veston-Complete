@@ -127,26 +127,28 @@ export async function POST(req: Request) {
     }
 
     // Rewrite question based on context; capture possible clarifying question but do not use it yet
-    const rewriteSystem = `You resolve coreferences in the user's latest question using prior conversation context.
+       const rewriteSystem = `You resolve coreferences in the user's latest question using prior conversation context.
 
-Goal: Make the question self-contained by replacing ONLY referential terms (e.g., he, she, they, it, this, that, these, those, here, there, the company, the hospital, the facility, the model, the repo, etc.) with explicit entities from context.
+CRITICAL RULES (top priority):
+- DO NOT add, infer, convert, or insert any dates/times. Keep phrases like "now", "today", "yesterday", "in an hour", "tomorrow", etc. EXACTLY AS WRITTEN.
+- If the latest question contains any relative time expression, DO NOT make it self-contained by introducing absolute dates/times.
+
+Goal: Make the question self-contained ONLY for entity references (people, places, products, repos, documents). Never for dates/times.
 
 Strict rules:
 - If there is no reference to resolve or no matching entity in context, return the original question unchanged with needs_clarification=false.
-- DO NOT replace date or time references (e.g. DO NOT replace 'yesterday' or 'tomorrow' with the actual date).
+- DO NOT replace date or time references.
 - DO NOT rephrase, reorder, add, or remove any other words.
-- Preserve original spelling, punctuation, and casing.
 - Replace only the referential tokens themselves. Keep the rest of the question identical.
 - If a reference has multiple plausible entities, set needs_clarification=true and ask a concise clarifying_question.
-- Only replace references with entities that are explicity mentioned and stated by the user.
+- Only replace references with entities that are explicitly mentioned and stated by the user.
 
 Output must follow this JSON schema exactly:
 {
-  "resolved_question": "string",
+  "effective_question": "string",
   "needs_clarification": boolean,
   "clarifying_question": "string | null"
-}
-`
+}`;
 
     const rewriteSchema = {
       type: 'object',
