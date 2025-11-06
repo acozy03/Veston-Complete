@@ -294,6 +294,10 @@ Output must follow this JSON schema exactly:
     })
 
     const workflowText = await workflowResponse.text()
+    try {
+      console.log('[chat] workflow status:', workflowResponse.status)
+      console.log('[chat] workflow raw text (first 1000 chars):', workflowText.slice(0, 1000))
+    } catch {}
     let workflowJson: unknown = null
 
     try {
@@ -313,12 +317,34 @@ Output must follow this JSON schema exactly:
       )
     }
 type JsonRecord = Record<string, unknown>;
-const obj = (typeof workflowJson === "object" && workflowJson !== null
+let obj = (typeof workflowJson === "object" && workflowJson !== null
   ? (workflowJson as JsonRecord)
   : null);
 
+// n8n sometimes wraps the real JSON as a string inside an `output` key
+if (obj && typeof (obj as any).output === 'string') {
+  try {
+    const inner = JSON.parse((obj as any).output);
+    if (typeof inner === 'object' && inner !== null) {
+      obj = inner as JsonRecord;
+    }
+  } catch {
+    // keep original obj if parse fails
+  }
+}
+
+// Also unwrap common containers like `{ data: {...} }`
+if (obj && typeof (obj as any).data === 'object' && (obj as any).data !== null) {
+  obj = (obj as any).data as JsonRecord;
+}
+
+try {
+  console.log('[chat] unwrapped object keys:', obj ? Object.keys(obj) : null)
+} catch {}
+
 // Handle Google Bucket Scraper array payloads that contain a markdown `message` field
 let reply: string;
+let sources: Array<{ url: string; title?: string; snippet?: string; score?: number }> | undefined;
 if (Array.isArray(workflowJson)) {
   const first = workflowJson[0] as JsonRecord | undefined;
   const arrMessage = typeof first?.message === "string" ? (first!.message as string) : null;
@@ -329,11 +355,55 @@ if (Array.isArray(workflowJson)) {
     (obj?.message && typeof obj.message === "string" && obj.message) ||
     (obj?.response && typeof obj.response === "string" && obj.response) ||
     (typeof workflowText === "string" ? workflowText : JSON.stringify(workflowJson));
+
+  // Optional structured sources passthrough
+  const rawSources = Array.isArray((obj as any)?.sources) ? (obj as any).sources : undefined
+  if (rawSources) {
+    sources = rawSources
+      .map((s: any) => ({
+        url: typeof s?.url === 'string' ? s.url : (typeof s?.link === 'string' ? s.link : undefined),
+        title: typeof s?.title === 'string' ? s.title : undefined,
+        snippet: typeof s?.snippet === 'string' ? s.snippet : undefined,
+        score: typeof s?.score === 'number' ? s.score : (typeof s?.score === 'string' ? Number(s.score) : undefined),
+      }))
+      .filter((s: any) => typeof s.url === 'string' && !!s.url)
+  }
 }
-    // Save assistant reply to messages
-    await supabase
+
+try {
+  console.log('[chat] parsed reply length:', typeof reply === 'string' ? reply.length : -1, 'sources count:', Array.isArray(sources) ? sources.length : 0)
+  if (Array.isArray(sources) && sources[0]) {
+    console.log('[chat] first source sample:', sources[0])
+  }
+} catch {}
+    // Save assistant reply to messages (capture id for source linking)
+    const { data: assistantInsert, error: assistantErr } = await supabase
       .from('messages')
       .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: reply })
+      .select('id')
+      .single()
+
+    if (assistantErr) {
+      console.error('Failed to insert assistant message', assistantErr)
+    }
+
+    // Opportunistically persist sources if available (ignore if table doesn't exist)
+    if (assistantInsert?.id && Array.isArray(sources) && sources.length > 0) {
+      try {
+        const rows = sources.map((s) => ({
+          message_id: assistantInsert.id as string,
+          chat_id: effectiveChatId,
+          user_email: user.email,
+          url: s.url,
+          title: s.title ?? null,
+          snippet: s.snippet ?? null,
+          score: typeof s.score === 'number' ? s.score : null,
+        }))
+        await supabase.from('message_sources').insert(rows)
+      } catch (e) {
+        console.warn('Skipping source persistence (table missing or RLS blocked):', e)
+      }
+    }
 
     // Log workflow run
     await supabase.from('workflow_runs').insert({
@@ -354,6 +424,7 @@ if (Array.isArray(workflowJson)) {
       classifier: classifierResult,
       raw: workflowJson ?? workflowText,
       chatId: effectiveChatId,
+      sources,
     })
     
   } catch (error) {

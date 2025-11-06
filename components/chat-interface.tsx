@@ -9,11 +9,19 @@ import { Menu } from "lucide-react"
 import { ThemeToggle } from "./theme-toggle"
 import { createClient } from "@/lib/supabase/client"
 
+export type Source = {
+  url: string
+  title?: string
+  snippet?: string
+  score?: number
+}
+
 export type Message = {
   id: string
   role: "user" | "assistant"
   content: string
   timestamp: Date
+  sources?: Source[]
 }
 
 export type Chat = {
@@ -130,11 +138,42 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       console.error("Failed to load messages", error)
       return
     }
+
+    // Attempt to fetch sources for these messages (if table exists and RLS allows)
+    let sourcesByMessage: Record<string, Source[]> = {}
+    try {
+      const ids = (data || []).map((m) => m.id as string)
+      if (ids.length > 0) {
+        const { data: srcRows } = await supabase
+          .from("message_sources")
+          .select("message_id, url, title, snippet, score")
+          .in("message_id", ids)
+          .eq("chat_id", chatId)
+          .eq("user_email", userEmail || "")
+        if (Array.isArray(srcRows)) {
+          for (const r of srcRows) {
+            const mid = String(r.message_id)
+            const item: Source = {
+              url: String(r.url),
+              title: r.title ? String(r.title) : undefined,
+              snippet: r.snippet ? String(r.snippet) : undefined,
+              score: typeof r.score === 'number' ? r.score : (r.score == null ? undefined : Number(r.score as any)),
+            }
+            if (!sourcesByMessage[mid]) sourcesByMessage[mid] = []
+            sourcesByMessage[mid].push(item)
+          }
+        }
+      }
+    } catch {
+      // swallow; table may not exist yet or RLS not configured
+    }
+
     const msgs: Message[] = (data || []).map((m) => ({
       id: m.id as string,
       role: (m.role as "user" | "assistant" | "system" | "tool") === "assistant" ? "assistant" : "user",
       content: m.content as string,
       timestamp: new Date(m.created_at as string),
+      sources: sourcesByMessage[String(m.id)] || undefined,
     }))
     // Avoid wiping optimistic local messages if the server hasn't written any yet
     setChats((prev) =>
@@ -294,11 +333,25 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           ? (parsed as { reply: string }).reply
           : responseText
 
+      // Extract optional sources array from the response
+      const sources: Source[] | undefined =
+        typeof parsed === "object" && parsed !== null && Array.isArray((parsed as any).sources)
+          ? (parsed as any).sources
+              .map((s: any) => ({
+                url: typeof s?.url === "string" ? s.url : typeof s?.link === "string" ? s.link : undefined,
+                title: typeof s?.title === "string" ? s.title : undefined,
+                snippet: typeof s?.snippet === "string" ? s.snippet : undefined,
+                score: typeof s?.score === "number" ? s.score : undefined,
+              }))
+              .filter((s: any) => typeof s.url === "string" && !!s.url)
+          : undefined
+
       const assistantMessage: Message = {
         id: generateId(),
         role: "assistant",
         content: replyText,
         timestamp: new Date(),
+        sources,
       }
 
       setChats((prevChats) =>

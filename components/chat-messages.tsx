@@ -54,7 +54,7 @@ export function ChatMessages({ messages, isTyping, user }: ChatMessagesProps) {
                   </div>
                 )}
 
-                <div className={cn("max-w-[85%] flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
+                <div className={cn("max-w-[85%] flex flex-col gap-2", message.role === "user" ? "items-end" : "items-start")}>
 
                 <div
                   className={cn(
@@ -94,6 +94,39 @@ export function ChatMessages({ messages, isTyping, user }: ChatMessagesProps) {
                     </ReactMarkdown>
                   </div>
                 </div>
+
+                {message.role === "assistant" && message.sources && message.sources.length > 0 && (
+                  <div className={cn(
+                    "w-full rounded-xl border border-border/50 bg-background/40 p-3 text-sm",
+                    message.role === "user" ? "text-primary-foreground" : "text-foreground",
+                  )}>
+                    <div className="mb-2 font-medium opacity-80">Sources</div>
+                    <ul className="space-y-1">
+                      {message.sources.map((s, idx) => {
+                        const label = s.title || s.url
+                        return (
+                          <li key={s.url + idx} className="truncate">
+                            <a
+                              className="underline underline-offset-2 hover:opacity-80"
+                              href={s.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={s.title || s.url}
+                            >
+                              {label}
+                            </a>
+                            {typeof s.score === 'number' && (
+                              <span className="ml-2 text-xs text-muted-foreground">({s.score.toFixed(2)})</span>
+                            )}
+                            {s.snippet && (
+                              <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{s.snippet}</div>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                )}
 
                 {message.timestamp && (
                   <div
