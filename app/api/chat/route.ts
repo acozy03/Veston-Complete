@@ -2,38 +2,8 @@ import { NextResponse } from "next/server"
 import OpenAI from "openai"
 import { createServerSupabase } from "@/lib/supabase/server"
 
-const GOOGLE_BUCKET_URL =
-  process.env.N8N_GOOGLE_BUCKET_SCRAPER_URL ??
-  "http://34.57.10.93:5678/webhook/5ba2b170-557f-4f18-a2c1-2921f5308bf5"
-const RADMAPPING_URL =
-  process.env.N8N_RADMAPPING_PLUS_URL ??
-  "http://34.57.10.93:5678/webhook/a09c94a6-7929-48ad-b9e6-c532ffcbac20"
-
-const CLASSIFICATION_GUIDELINES =
-  process.env.CLASSIFICATION_PROMPT ??
-  "<<< TODO: Provide the detailed rules that decide between google bucket scrape and radmapping+. >>>"
-
-const WORKFLOW_URLS = {
-  GOOGLE_BUCKET_SCRAPER: GOOGLE_BUCKET_URL,
-  RADMAPPING_PLUS: RADMAPPING_URL,
-} as const
-
-const CLASSIFICATION_SCHEMA = {
-  type: "object",
-  properties: {
-    label: { type: "string", enum: ["GOOGLE_BUCKET_SCRAPER", "RADMAPPING_PLUS"] },
-    confidence: { type: "string" },
-    rationale: { type: "string" },
-  },
-  required: ["label", "confidence", "rationale"],  
-  additionalProperties: false,
-} as const;
-
-interface ClassifierResult {
-  label: keyof typeof WORKFLOW_URLS
-  confidence?: string
-  rationale?: string
-}
+// Single n8n classifier webhook endpoint
+const N8N_CLASSIFIER_URL = process.env.N8N_CLASSIFIER_URL
 
 export async function POST(req: Request) {
   try {
@@ -218,79 +188,17 @@ Output must follow this JSON schema exactly:
       }))
       await supabase.from('message_contexts').insert(rows)
     }
-    console.log(CLASSIFICATION_GUIDELINES)
-    const classifierResponse = await client.responses.create({
-  model: "gpt-4.1-mini",
-  input: [
-    { role: "system", content: `You are a strict classification engine. Pick exactly one workflow label for each message. Use these rules:\n${CLASSIFICATION_GUIDELINES}\nRespond as JSON that matches the provided schema.` },
-    { role: "user", content: `User message: ${question}` },
-  ],
-  text: {
-    format: {
-      type: "json_schema",
-      name: "workflow_classifier",
-      schema: CLASSIFICATION_SCHEMA,
-      strict: true,
-    },
-  },
-});
-
-    const rawOutput = classifierResponse.output_text  
-    console.log(rawOutput); 
-    let classifierResult: ClassifierResult | null = null
-
-    if (rawOutput) {
-      try {
-        classifierResult = JSON.parse(rawOutput) as ClassifierResult
-      } catch (parseError) {
-        console.error("Failed to parse classifier output", parseError)
-      }
+    if (!N8N_CLASSIFIER_URL) {
+      return NextResponse.json({ error: "Missing N8N_CLASSIFIER_URL" }, { status: 500 })
     }
 
-    const label = classifierResult?.label ?? "GOOGLE_BUCKET_SCRAPER"
-    const workflowUrl = WORKFLOW_URLS[label]
-
-    if (!workflowUrl) {
-      return NextResponse.json({ error: `No workflow URL configured for label ${label}` }, { status: 500 })
-    }
-
-    // Only ask for clarification when classifier confidence is low
-    const normalizeConfidence = (c?: string): number => {
-      if (!c) return 0.5
-      const n = parseFloat(c)
-      if (!Number.isNaN(n)) {
-        // Treat values in 0-1 as-is, 0-100 as percentage
-        if (n > 1 && n <= 100) return Math.max(0, Math.min(1, n / 100))
-        return Math.max(0, Math.min(1, n))
-      }
-      const lc = c.toLowerCase()
-      if (lc.includes('low')) return 0.25
-      if (lc.includes('medium')) return 0.55
-      if (lc.includes('high')) return 0.85
-      return 0.5
-    }
-    const confidenceScore = normalizeConfidence(classifierResult?.confidence)
-    const LOW_CONFIDENCE_THRESHOLD = 0.6
-    if (confidenceScore < LOW_CONFIDENCE_THRESHOLD) {
-      const ask = clarifyingQuestion || 'Could you share a bit more detail so I can route this correctly?'
-      await supabase
-        .from('messages')
-        .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: ask })
-
-      return NextResponse.json({
-        reply: ask,
-        workflow: 'clarification',
-        classifier: classifierResult,
-        chatId: effectiveChatId,
-      })
-    }
-
-    const workflowResponse = await fetch(workflowUrl, {
+    // Route directly to the single n8n classifier webhook
+    const workflowResponse = await fetch(N8N_CLASSIFIER_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ question: effectiveQuestion, history, classifier: classifierResult, timestamp: new Date().toISOString() }),
+      body: JSON.stringify({ question: effectiveQuestion, history, timestamp: new Date().toISOString() }),
     })
 
     const workflowText = await workflowResponse.text()
@@ -321,7 +229,8 @@ let obj = (typeof workflowJson === "object" && workflowJson !== null
   ? (workflowJson as JsonRecord)
   : null);
 
-// n8n sometimes wraps the real JSON as a string inside an `output` key
+// n8n sometimes wraps the real JSON inside an `output` key
+// Handle both stringified and object forms
 if (obj && typeof (obj as any).output === 'string') {
   try {
     const inner = JSON.parse((obj as any).output);
@@ -331,6 +240,10 @@ if (obj && typeof (obj as any).output === 'string') {
   } catch {
     // keep original obj if parse fails
   }
+}
+
+if (obj && typeof (obj as any).output === 'object' && (obj as any).output !== null) {
+  obj = (obj as any).output as JsonRecord;
 }
 
 // Also unwrap common containers like `{ data: {...} }`
@@ -441,17 +354,13 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
       user_email: user.email,
       chat_id: effectiveChatId,
       message_id: userMessageId,
-      classifier_path: label,
+      classifier_path: 'N8N_CLASSIFIER',
       payload: { question: effectiveQuestion, history },
       status: 'succeeded',
-      llm_prompt: CLASSIFICATION_GUIDELINES,
-      llm_response: classifierResult as any,
     })
 
     return NextResponse.json({
       reply,
-      workflow: label,
-      classifier: classifierResult,
       raw: workflowJson ?? workflowText,
       chatId: effectiveChatId,
       sources,
