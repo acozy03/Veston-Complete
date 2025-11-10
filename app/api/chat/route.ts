@@ -96,7 +96,7 @@ export async function POST(req: Request) {
       console.error('Failed to fetch context', ctxErr)
     }
 
-    // Rewrite question based on context; capture possible clarifying question but do not use it yet
+    // Rewrite question based on context; be very strict about using chat memory
        const rewriteSystem = `You resolve coreferences in the user's latest question using prior conversation context.
 
 CRITICAL RULES (top priority):
@@ -105,12 +105,19 @@ CRITICAL RULES (top priority):
 
 Goal: Make the question self-contained ONLY for entity references (people, places, products, repos, documents). Never for dates/times.
 
-Strict rules:
-- If there is no reference to resolve or no matching entity in context, return the original question unchanged with needs_clarification=false.
+STRICT MEMORY POLICY (be very picky):
+- Only use prior messages when the latest question contains clear anaphora or definite references (e.g., "it", "they", "that report", "the schedule", "those files", "this one").
+- Resolve a reference ONLY if there is exactly one unambiguous match in the recent context; otherwise set needs_clarification=true.
+- Never infer or guess from context if there are zero or multiple plausible matches.
+- Only substitute the minimal referential token(s) with the explicit entity mentioned by the user earlier.
+- If the effective question would change any meaning beyond the minimal substitution, set needs_clarification=true instead of rewriting.
+
+Additional rules:
+- If there is no referential phrase to resolve, return the original question unchanged with needs_clarification=false.
 - DO NOT replace date or time references.
 - DO NOT rephrase, reorder, add, or remove any other words.
 - Replace only the referential tokens themselves. Keep the rest of the question identical.
-- If a reference has multiple plausible entities, set needs_clarification=true and ask a concise clarifying_question.
+- If a reference has multiple plausible entities, set needs_clarification=true and ask a concise clarifying_question that names the options or asks for the missing detail.
 - Only replace references with entities that are explicitly mentioned and stated by the user.
 
 Output must follow this JSON schema exactly:
@@ -138,7 +145,7 @@ Output must follow this JSON schema exactly:
       .join('\n')
 
     const rewriteResp = await client.responses.create({
-      model: 'gpt-4.1-mini',
+      model: 'o4-mini',
       input: [
         { role: 'system', content: rewriteSystem },
         { role: 'user', content: `Context:\n${contextText}\n\nQuestion: ${question}` },
@@ -187,6 +194,23 @@ Output must follow this JSON schema exactly:
         score: Math.max(0, 1 - idx * 0.05),
       }))
       await supabase.from('message_contexts').insert(rows)
+    }
+
+    // If rewrite indicates clarification is needed, ask before routing to n8n
+    if (needsClarification) {
+      const ask = clarifyingQuestion && clarifyingQuestion.trim().length > 0
+        ? clarifyingQuestion
+        : 'I need a quick clarification before proceeding. Could you confirm what you mean?'
+
+      await supabase
+        .from('messages')
+        .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: ask })
+
+      return NextResponse.json({
+        reply: ask,
+        clarification: true,
+        chatId: effectiveChatId,
+      })
     }
     if (!N8N_CLASSIFIER_URL) {
       return NextResponse.json({ error: "Missing N8N_CLASSIFIER_URL" }, { status: 500 })
