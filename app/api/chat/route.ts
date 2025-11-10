@@ -376,6 +376,36 @@ try {
     console.log('[chat] first source sample:', sources[0])
   }
 } catch {}
+
+// If sources are present, strip their URLs from the reply so links only appear in the Sources box
+const stripUrlFromText = (text: string, url: string) => {
+  if (!text || !url) return text
+  let out = text
+  const variants = [
+    url,
+    `[${url}]`,
+    `(${url})`,
+    `<${url}>`,
+  ]
+  for (const v of variants) {
+    out = out.split(v).join("")
+  }
+  // Clean up leftover extra spaces but PRESERVE newlines
+  out = out
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\[\s*\]/g, '')
+    .replace(/\(\s*\)/g, '')
+    .replace(/[ \t]+\n/g, '\n') // trim spaces before newline
+    .replace(/\n{3,}/g, '\n\n') // collapse 3+ newlines to 2
+    .trim()
+  return out
+}
+
+if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
+  for (const s of sources) {
+    if (s?.url) reply = stripUrlFromText(reply, s.url)
+  }
+}
     // Save assistant reply to messages (capture id for source linking)
     const { data: assistantInsert, error: assistantErr } = await supabase
       .from('messages')
