@@ -61,6 +61,9 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const [userId, setUserId] = useState<string>("")
   const [userEmail, setUserEmail] = useState<string>(user?.email || "")
   const [mode, setMode] = useState<"fast" | "slow">("fast")
+  const [radmapping, setRadmapping] = useState<boolean>(false)
+  const [reportSearch, setReportSearch] = useState<boolean>(false)
+  const [itSupportDocuments, setItSupportDocuments] = useState<boolean>(false)
 
   const supabase = useMemo(() => createClient(), [])
 
@@ -326,6 +329,12 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         fast: mode === "fast",
         slow: mode === "slow",
         mode,
+        // Requested workflows (mutually exclusive)
+        radmapping,
+        reportSearch,
+        itSupportDocuments,
+        // Explicit default-case flag for classifier routing
+        noWorkflow: !radmapping && !reportSearch && !itSupportDocuments,
       }
       // Client-side debug log for visibility in devtools
       try { console.log("POST /api/chat payload", payload) } catch {}
@@ -489,32 +498,31 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
         <ChatMessages messages={currentChat?.messages || []} isTyping={isTyping} user={user} />
 
-        {/* Response speed toggle */}
-        <div className="border-t border-border bg-background px-4 py-2">
-          <div className="mx-auto flex max-w-3xl items-center justify-between">
-            <span className="text-xs text-muted-foreground">Reasoning Quality - high yields slower, more accurate results</span>
-            <div className="inline-flex rounded-md shadow-sm" role="group">
-              <Button
-                variant={mode === "fast" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMode("fast")}
-                className="rounded-r-none"
-              >
-                Low
-              </Button>
-              <Button
-                variant={mode === "slow" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMode("slow")}
-                className="rounded-l-none"
-              >
-                High
-              </Button>
-            </div>
-          </div>
-        </div>
+        {/* Summary moved below input (inside ChatInput) */}
 
-        <ChatInput onSendQuestion={handleSendQuestion} />
+        <ChatInput
+          onSendQuestion={handleSendQuestion}
+          mode={mode}
+          onChangeMode={setMode}
+          radmapping={radmapping}
+          reportSearch={reportSearch}
+          itSupportDocuments={itSupportDocuments}
+          onToggleWorkflow={(name, value) => {
+            // Enforce mutual exclusivity: only one workflow true at most
+            if (name === "radmapping") {
+              setRadmapping(value)
+              if (value) { setReportSearch(false); setItSupportDocuments(false) }
+            }
+            if (name === "reportSearch") {
+              setReportSearch(value)
+              if (value) { setRadmapping(false); setItSupportDocuments(false) }
+            }
+            if (name === "itSupportDocuments") {
+              setItSupportDocuments(value)
+              if (value) { setRadmapping(false); setReportSearch(false) }
+            }
+          }}
+        />
       </div>
     </div>
   )

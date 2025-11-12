@@ -14,6 +14,10 @@ export async function POST(req: Request) {
       fast,
       slow,
       mode,
+      radmapping,
+      reportSearch,
+      itSupportDocuments,
+      noWorkflow,
     }: {
       question?: string
       history?: Array<{ role: string; content: string }>
@@ -21,6 +25,10 @@ export async function POST(req: Request) {
       fast?: boolean
       slow?: boolean
       mode?: "fast" | "slow" | string
+      radmapping?: boolean
+      reportSearch?: boolean
+      itSupportDocuments?: boolean
+      noWorkflow?: boolean
     } = await req.json()
 
     // Server-side debug log of incoming request fields
@@ -32,6 +40,10 @@ export async function POST(req: Request) {
         mode,
         fast: fast === true,
         slow: slow === true,
+        radmapping: radmapping === true,
+        reportSearch: reportSearch === true,
+        itSupportDocuments: itSupportDocuments === true,
+        noWorkflow: noWorkflow === true,
         questionPreview: preview,
       })
     } catch {}
@@ -248,6 +260,10 @@ Output must follow this JSON schema exactly:
         mode,
         fast: fast === true,
         slow: slow === true,
+        radmapping: radmapping === true,
+        reportSearch: reportSearch === true,
+        itSupportDocuments: itSupportDocuments === true,
+        noWorkflow: noWorkflow === true,
         // helpful context
         chatId: effectiveChatId,
         timestamp: new Date().toISOString(),
@@ -408,7 +424,17 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
       chat_id: effectiveChatId,
       message_id: userMessageId,
       classifier_path: 'N8N_CLASSIFIER',
-      payload: { question: effectiveQuestion, history, mode, fast: fast === true, slow: slow === true },
+      payload: {
+        question: effectiveQuestion,
+        history,
+        mode,
+        fast: fast === true,
+        slow: slow === true,
+        radmapping: radmapping === true,
+        reportSearch: reportSearch === true,
+        itSupportDocuments: itSupportDocuments === true,
+        noWorkflow: noWorkflow === true,
+      },
       status: 'succeeded',
     })
 
