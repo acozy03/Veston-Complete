@@ -11,11 +11,30 @@ export async function POST(req: Request) {
       question,
       history = [],
       chatId,
+      fast,
+      slow,
+      mode,
     }: {
       question?: string
       history?: Array<{ role: string; content: string }>
       chatId?: string
+      fast?: boolean
+      slow?: boolean
+      mode?: "fast" | "slow" | string
     } = await req.json()
+
+    // Server-side debug log of incoming request fields
+    try {
+      const preview = typeof question === 'string' ? (question.length > 80 ? question.slice(0, 80) + '...' : question) : ''
+      console.log('[api/chat] request', {
+        chatId,
+        historyLen: Array.isArray(history) ? history.length : 0,
+        mode,
+        fast: fast === true,
+        slow: slow === true,
+        questionPreview: preview,
+      })
+    } catch {}
 
     if (!question || !question.trim()) {
       return NextResponse.json({ error: "Question is required" }, { status: 400 })
@@ -222,7 +241,17 @@ Output must follow this JSON schema exactly:
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ question: effectiveQuestion, history, timestamp: new Date().toISOString() }),
+      body: JSON.stringify({
+        question: effectiveQuestion,
+        history,
+        // forward mode flags so n8n can choose models
+        mode,
+        fast: fast === true,
+        slow: slow === true,
+        // helpful context
+        chatId: effectiveChatId,
+        timestamp: new Date().toISOString(),
+      }),
     })
 
     const workflowText = await workflowResponse.text()
@@ -379,7 +408,7 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
       chat_id: effectiveChatId,
       message_id: userMessageId,
       classifier_path: 'N8N_CLASSIFIER',
-      payload: { question: effectiveQuestion, history },
+      payload: { question: effectiveQuestion, history, mode, fast: fast === true, slow: slow === true },
       status: 'succeeded',
     })
 

@@ -161,7 +161,7 @@ export function ChatSidebar({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" sideOffset={6} onClick={(e) => e.stopPropagation()}>
                         <DropdownMenuItem
-                          className="  "
+                          className="focus:text-red-500"
                           onClick={(e) => {
                             e.preventDefault()
                             e.stopPropagation()

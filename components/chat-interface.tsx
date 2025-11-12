@@ -60,6 +60,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const [serverChatId, setServerChatId] = useState<string>(initialChatId || "")
   const [userId, setUserId] = useState<string>("")
   const [userEmail, setUserEmail] = useState<string>(user?.email || "")
+  const [mode, setMode] = useState<"fast" | "slow">("fast")
 
   const supabase = useMemo(() => createClient(), [])
 
@@ -105,6 +106,21 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Load persisted chat mode preference
+  useEffect(() => {
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("chatMode") : null
+      if (saved === "fast" || saved === "slow") setMode(saved)
+    } catch {}
+  }, [])
+
+  // Persist chat mode preference
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") localStorage.setItem("chatMode", mode)
+    } catch {}
+  }, [mode])
 
   const loadPreviews = async (items: Chat[]) => {
     await Promise.all(
@@ -302,13 +318,24 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
     try {
       const historyPayload = updatedMessages.map((message) => ({ role: message.role, content: message.content }))
+      const payload = {
+        question,
+        history: historyPayload,
+        chatId: requestChatId,
+        // Pass selected response speed upstream
+        fast: mode === "fast",
+        slow: mode === "slow",
+        mode,
+      }
+      // Client-side debug log for visibility in devtools
+      try { console.log("POST /api/chat payload", payload) } catch {}
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         // Only send chatId if we know the server-side id
-        body: JSON.stringify({ question, history: historyPayload, chatId: requestChatId }),
+        body: JSON.stringify(payload),
       })
 
       const responseText = await response.text()
@@ -461,6 +488,31 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         </header>
 
         <ChatMessages messages={currentChat?.messages || []} isTyping={isTyping} user={user} />
+
+        {/* Response speed toggle */}
+        <div className="border-t border-border bg-background px-4 py-2">
+          <div className="mx-auto flex max-w-3xl items-center justify-between">
+            <span className="text-xs text-muted-foreground">Reasoning Quality - high yields slower results</span>
+            <div className="inline-flex rounded-md shadow-sm" role="group">
+              <Button
+                variant={mode === "fast" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setMode("fast")}
+                className="rounded-r-none"
+              >
+                High
+              </Button>
+              <Button
+                variant={mode === "slow" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setMode("slow")}
+                className="rounded-l-none"
+              >
+                Low
+              </Button>
+            </div>
+          </div>
+        </div>
 
         <ChatInput onSendQuestion={handleSendQuestion} />
       </div>
