@@ -176,7 +176,10 @@ Output must follow this JSON schema exactly:
       .join('\n')
 
     const rewriteResp = await client.responses.create({
-      model: 'o4-mini',
+      // Faster but capable model for clarifier/memory step
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      max_output_tokens: 150,
       input: [
         { role: 'system', content: rewriteSystem },
         { role: 'user', content: `Context:\n${contextText}\n\nQuestion: ${question}` },
