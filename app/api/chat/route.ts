@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import OpenAI from "openai"
 import { createServerSupabase } from "@/lib/supabase/server"
 
 // Single n8n classifier webhook endpoint
@@ -52,11 +51,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Question is required" }, { status: 400 })
     }
 
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 })
-    }
-
     // Identify the signed-in user (RLS)
     const supabase = await createServerSupabase()
     const { data: userRes, error: userErr } = await supabase.auth.getUser()
@@ -64,8 +58,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const user = userRes.user
-
-    const client = new OpenAI({ apiKey })
 
     // Create or retrieve chat row (scoped by user)
     let effectiveChatId = chatId
@@ -115,137 +107,8 @@ export async function POST(req: Request) {
     }
     const userMessageId = msgInsert.id as string
 
-    // Fetch recent context from this chat (memory)
-    const { data: contextMessages, error: ctxErr } = await supabase
-      .from('messages')
-      .select('id, role, content, created_at')
-      .eq('chat_id', effectiveChatId)
-      .eq('user_email', user.email)
-      .order('created_at', { ascending: false })
-      .limit(20)
-    if (ctxErr) {
-      console.error('Failed to fetch context', ctxErr)
-    }
-
-    // Rewrite question based on context; be very strict about using chat memory
-       const rewriteSystem = `You resolve coreferences in the user's latest question using prior conversation context.
-
-CRITICAL RULES (top priority):
-- DO NOT add, infer, convert, or insert any dates/times. Keep phrases like "now", "today", "yesterday", "in an hour", "tomorrow", etc. EXACTLY AS WRITTEN.
-- If the latest question contains any relative time expression, DO NOT make it self-contained by introducing absolute dates/times.
-
-Goal: Make the question self-contained ONLY for entity references (people, places, products, repos, documents). Never for dates/times.
-
-STRICT MEMORY POLICY (be very picky):
-- Only use prior messages when the latest question contains clear anaphora or definite references (e.g., "it", "they", "that report", "the schedule", "those files", "this one").
-- Resolve a reference ONLY if there is exactly one unambiguous match in the recent context; otherwise set needs_clarification=true.
-- Never infer or guess from context if there are zero or multiple plausible matches.
-- Only substitute the minimal referential token(s) with the explicit entity mentioned by the user earlier.
-- If the effective question would change any meaning beyond the minimal substitution, set needs_clarification=true instead of rewriting.
-
-Additional rules:
-- If there is no referential phrase to resolve, return the original question unchanged with needs_clarification=false.
-- DO NOT replace date or time references.
-- DO NOT rephrase, reorder, add, or remove any other words.
-- Replace only the referential tokens themselves. Keep the rest of the question identical.
-- If a reference has multiple plausible entities, set needs_clarification=true and ask a concise clarifying_question that names the options or asks for the missing detail.
-- Only replace references with entities that are explicitly mentioned and stated by the user.
-
-Output must follow this JSON schema exactly:
-{
-  "effective_question": "string",
-  "needs_clarification": boolean,
-  "clarifying_question": "string | null"
-}`;
-
-    const rewriteSchema = {
-      type: 'object',
-      properties: {
-        effective_question: { type: 'string' },
-        needs_clarification: { type: 'boolean' },
-        clarifying_question: { type: 'string' },
-      },
-      required: ['effective_question', 'needs_clarification', 'clarifying_question'],
-      additionalProperties: false,
-    } as const
-
-    const contextText = (contextMessages ?? [])
-      .slice() // copy
-      .reverse() // oldest first
-      .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
-      .join('\n')
-
-    const rewriteResp = await client.responses.create({
-      // Faster but capable model for clarifier/memory step
-      model: 'gpt-4o-mini',
-      temperature: 0.2,
-      max_output_tokens: 150,
-      input: [
-        { role: 'system', content: rewriteSystem },
-        { role: 'user', content: `Context:\n${contextText}\n\nQuestion: ${question}` },
-      ],
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'rewrite_schema',
-          schema: rewriteSchema,
-          strict: true,
-        },
-      },
-    })
-
-    const rewriteRaw = rewriteResp.output_text
-    let effectiveQuestion = question
-    let needsClarification = false
-    let clarifyingQuestion = ''
-
-    if (rewriteRaw) {
-      try {
-        const parsed = JSON.parse(rewriteRaw) as {
-          effective_question: string
-          needs_clarification: boolean
-          clarifying_question?: string
-        }
-        effectiveQuestion = parsed.effective_question || question
-        needsClarification = !!parsed.needs_clarification
-        clarifyingQuestion = parsed.clarifying_question || ''
-      } catch (e) {
-        console.warn('Failed to parse rewrite JSON; proceeding with original question')
-      }
-    }
-    console.log('Effective question:', effectiveQuestion, 'Needs clarification:', needsClarification, 'Clarifying question:', clarifyingQuestion)
-    // Persist rewrite and context links
-    if (effectiveQuestion !== question) {
-      await supabase
-        .from('message_rewrites')
-        .insert({ original_message_id: userMessageId, user_email: user.email, rewritten_content: effectiveQuestion, method: 'llm' })
-    }
-    if (contextMessages && contextMessages.length) {
-      const rows = contextMessages.map((m, idx) => ({
-        message_id: userMessageId,
-        user_email: user.email,
-        context_message_id: m.id,
-        score: Math.max(0, 1 - idx * 0.05),
-      }))
-      await supabase.from('message_contexts').insert(rows)
-    }
-
-    // If rewrite indicates clarification is needed, ask before routing to n8n
-    if (needsClarification) {
-      const ask = clarifyingQuestion && clarifyingQuestion.trim().length > 0
-        ? clarifyingQuestion
-        : 'I need a quick clarification before proceeding. Could you confirm what you mean?'
-
-      await supabase
-        .from('messages')
-        .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: ask })
-
-      return NextResponse.json({
-        reply: ask,
-        clarification: true,
-        chatId: effectiveChatId,
-      })
-    }
+    // Skip intermediate clarifier/memory step for speed
+    const effectiveQuestion = question
     if (!N8N_CLASSIFIER_URL) {
       return NextResponse.json({ error: "Missing N8N_CLASSIFIER_URL" }, { status: 500 })
     }
