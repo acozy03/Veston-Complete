@@ -64,6 +64,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const [radmapping, setRadmapping] = useState<boolean>(false)
   const [reportSearch, setReportSearch] = useState<boolean>(false)
   const [itSupportDocuments, setItSupportDocuments] = useState<boolean>(false)
+  const [abortController, setAbortController] = useState<AbortController | null>(null)
 
   const supabase = useMemo(() => createClient(), [])
 
@@ -321,6 +322,8 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
     try {
       const historyPayload = updatedMessages.map((message) => ({ role: message.role, content: message.content }))
+      const controller = new AbortController()
+      setAbortController(controller)
       const payload = {
         question,
         history: historyPayload,
@@ -345,6 +348,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         },
         // Only send chatId if we know the server-side id
         body: JSON.stringify(payload),
+        signal: controller.signal,
       })
 
       const responseText = await response.text()
@@ -424,6 +428,12 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         void loadMessages(idToLoad)
       }
     } catch (error) {
+      // Swallow aborts silently (user cancelled)
+      const message = error instanceof Error ? error.message : String(error)
+      const aborted = (error as any)?.name === 'AbortError' || /abort/i.test(message)
+      if (aborted) {
+        return
+      }
       const fallbackMessage =
         error instanceof Error ? `Sorry, something went wrong: ${error.message}` : "Sorry, something went wrong."
 
@@ -446,7 +456,15 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       )
     } finally {
       setIsTyping(false)
+      try { abortController?.abort() } catch {}
+      setAbortController(null)
     }
+  }
+
+  const handleCancel = () => {
+    try { abortController?.abort() } catch {}
+    setIsTyping(false)
+    setAbortController(null)
   }
 
   const handleDeleteChat = (chatId: string) => {
@@ -507,6 +525,8 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           radmapping={radmapping}
           reportSearch={reportSearch}
           itSupportDocuments={itSupportDocuments}
+          isTyping={isTyping}
+          onCancel={handleCancel}
           onToggleWorkflow={(name, value) => {
             // Enforce mutual exclusivity: only one workflow true at most
             if (name === "radmapping") {

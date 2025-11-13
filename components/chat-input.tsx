@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useRef, type KeyboardEvent } from "react"
 import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
-import { Send, Plus } from "lucide-react"
+import { Send, Plus, Square } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -23,6 +23,8 @@ interface ChatInputProps {
   radmapping: boolean
   reportSearch: boolean
   itSupportDocuments: boolean
+  isTyping: boolean
+  onCancel: () => void
   onToggleWorkflow: (
     name: "radmapping" | "reportSearch" | "itSupportDocuments",
     value: boolean,
@@ -36,6 +38,8 @@ export function ChatInput({
   radmapping,
   reportSearch,
   itSupportDocuments,
+  isTyping,
+  onCancel,
   onToggleWorkflow,
 }: ChatInputProps) {
   const [question, setQuestion] = useState("")
@@ -160,14 +164,27 @@ export function ChatInput({
             rows={1}
           />
 
-          <Button
-            onClick={handleSend}
-            disabled={!question.trim()}
-            size="icon"
-            className="mb-2 shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            <Send className="h-5 w-5" />
-          </Button>
+          {isTyping ? (
+            <Button
+              type="button"
+              onClick={onCancel}
+              size="icon"
+              variant="outline"
+              className="mb-2 shrink-0"
+              title="Stop"
+            >
+              <Square className="h-5 w-5" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={isTyping || !question.trim()}
+              size="icon"
+              className="mb-2 shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Send className="h-5 w-5" />
+            </Button>
+          )}
         </div>
         <p className="mt-2 text-center text-xs text-muted-foreground/80">
           {mode === "slow" ? "High (Slow)" : "Low (Fast)"}
