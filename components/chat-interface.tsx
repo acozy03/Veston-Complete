@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { cn } from "@/lib/utils"
+import Image from "next/image"
 import { ChatSidebar } from "./chat-sidebar"
 import { ChatMessages } from "./chat-messages"
 import { ChatInput } from "./chat-input"
@@ -68,6 +70,21 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
   const supabase = useMemo(() => createClient(), [])
 
+  // Hero title options; one picked randomly per load
+  const heroTitles = [
+    (name?: string) => name ? `Hey, ${name}. Ready to dive in?` : "Hey there. Ready to dive in?",
+    (name?: string) => name ? `Hi ${name}, what can I help with?` : "Hi there, what can I help with?",
+    () => "What should we work on today?",
+    () => "Ask anything — I’m listening",
+    () => "Need answers or a quick draft?",
+    () => "Turn ideas into results",
+    () => "Ask away — I’ll handle the rest",
+    () => "Your AI teammate is ready",
+    () => "From data to docs in seconds",
+    () => "Let’s get something done",
+  ] as const
+  const [heroTitle, setHeroTitle] = useState<string>("")
+
   // Load chats on mount if none provided
   useEffect(() => {
     const load = async () => {
@@ -109,6 +126,14 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     }
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Pick a random hero title on mount
+  useEffect(() => {
+    const idx = Math.floor(Math.random() * heroTitles.length)
+    const title = heroTitles[idx](user?.name)
+    setHeroTitle(title)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Load persisted chat mode preference
@@ -214,6 +239,17 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   }
 
   const currentChat = chats.find((chat) => chat.id === currentChatId)
+  const hasMessages = (currentChat?.messages?.length || 0) > 0
+
+  // Smooth transition: briefly keep hero visible while chat view fades in
+  const [heroExiting, setHeroExiting] = useState(false)
+  useEffect(() => {
+    if (hasMessages) {
+      setHeroExiting(true)
+      const id = setTimeout(() => setHeroExiting(false), 350)
+      return () => clearTimeout(id)
+    }
+  }, [hasMessages])
 
   // Load messages when switching chats
   useEffect(() => {
@@ -519,35 +555,90 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           <ThemeToggle />
         </header>
 
-        <ChatMessages messages={currentChat?.messages || []} isTyping={isTyping} user={user} />
+        <div className="relative flex flex-1">
+          {/* Chat view (fades in) */}
+          <div className={cn("flex flex-1 flex-col transition-opacity duration-300", hasMessages ? "opacity-100" : "opacity-0 pointer-events-none") }>
+            <ChatMessages messages={currentChat?.messages || []} isTyping={isTyping} user={user} />
+            <ChatInput
+              onSendQuestion={handleSendQuestion}
+              mode={mode}
+              onChangeMode={setMode}
+              radmapping={radmapping}
+              reportSearch={reportSearch}
+              itSupportDocuments={itSupportDocuments}
+              isTyping={isTyping}
+              onCancel={handleCancel}
+              onToggleWorkflow={(name, value) => {
+                // Enforce mutual exclusivity: only one workflow true at most
+                if (name === "radmapping") {
+                  setRadmapping(value)
+                  if (value) { setReportSearch(false); setItSupportDocuments(false) }
+                }
+                if (name === "reportSearch") {
+                  setReportSearch(value)
+                  if (value) { setRadmapping(false); setItSupportDocuments(false) }
+                }
+                if (name === "itSupportDocuments") {
+                  setItSupportDocuments(value)
+                  if (value) { setRadmapping(false); setReportSearch(false) }
+                }
+              }}
+            />
+          </div>
 
-        {/* Summary moved below input (inside ChatInput) */}
-
-        <ChatInput
-          onSendQuestion={handleSendQuestion}
-          mode={mode}
-          onChangeMode={setMode}
-          radmapping={radmapping}
-          reportSearch={reportSearch}
-          itSupportDocuments={itSupportDocuments}
-          isTyping={isTyping}
-          onCancel={handleCancel}
-          onToggleWorkflow={(name, value) => {
-            // Enforce mutual exclusivity: only one workflow true at most
-            if (name === "radmapping") {
-              setRadmapping(value)
-              if (value) { setReportSearch(false); setItSupportDocuments(false) }
-            }
-            if (name === "reportSearch") {
-              setReportSearch(value)
-              if (value) { setRadmapping(false); setItSupportDocuments(false) }
-            }
-            if (name === "itSupportDocuments") {
-              setItSupportDocuments(value)
-              if (value) { setRadmapping(false); setReportSearch(false) }
-            }
-          }}
-        />
+          {/* Hero overlay (fades out) */}
+          {(!hasMessages || heroExiting) && (
+            <div
+              className={cn(
+                "absolute inset-0 transition-all duration-300",
+                heroExiting ? "opacity-0 translate-y-4 pointer-events-none" : "opacity-100 translate-y-0",
+              )}
+            >
+              <div className="relative h-full w-full">
+                {/* Center the chat bar exactly in the viewport */}
+                <div className="absolute left-1/2 top-1/2 w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 px-6">
+                  <div className="relative">
+                    {/* Logo + title sit just above the chat bar */}
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-6 flex w-full max-w-3xl flex-col items-center gap-4 px-2">
+                      <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl bg-accent">
+                        <Image src="/logo.png" alt="Veston" width={64} height={64} className="h-16 w-16 object-cover" />
+                      </div>
+                      <h2 className="max-w-2xl text-center text-2xl font-semibold text-foreground">
+                        {heroTitle}
+                      </h2>
+                    </div>
+                    <ChatInput
+                      hero
+                      placeholder="Ask away..."
+                      onSendQuestion={handleSendQuestion}
+                      mode={mode}
+                      onChangeMode={setMode}
+                      radmapping={radmapping}
+                      reportSearch={reportSearch}
+                      itSupportDocuments={itSupportDocuments}
+                      isTyping={isTyping}
+                      onCancel={handleCancel}
+                      onToggleWorkflow={(name, value) => {
+                        if (name === "radmapping") {
+                          setRadmapping(value)
+                          if (value) { setReportSearch(false); setItSupportDocuments(false) }
+                        }
+                        if (name === "reportSearch") {
+                          setReportSearch(value)
+                          if (value) { setRadmapping(false); setItSupportDocuments(false) }
+                        }
+                        if (name === "itSupportDocuments") {
+                          setItSupportDocuments(value)
+                          if (value) { setRadmapping(false); setReportSearch(false) }
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

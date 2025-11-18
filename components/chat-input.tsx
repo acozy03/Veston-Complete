@@ -29,6 +29,8 @@ interface ChatInputProps {
     name: "radmapping" | "reportSearch" | "itSupportDocuments",
     value: boolean,
   ) => void
+  hero?: boolean
+  placeholder?: string
 }
 
 export function ChatInput({
@@ -41,6 +43,8 @@ export function ChatInput({
   isTyping,
   onCancel,
   onToggleWorkflow,
+  hero = false,
+  placeholder,
 }: ChatInputProps) {
   const [question, setQuestion] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -69,8 +73,8 @@ export function ChatInput({
   }
 
   return (
-    <div className="border-t border-border bg-background p-4">
-      <div className="mx-auto max-w-3xl">
+    <div className={cn(hero ? "p-0" : "border-t border-border bg-background p-4") }>
+      <div className={cn("mx-auto", hero ? "max-w-3xl" : "max-w-3xl") }>
         <div className="relative flex items-end gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -78,7 +82,7 @@ export function ChatInput({
                 type="button"
                 variant="outline"
                 size="icon"
-                className="mb-2 shrink-0"
+                className={cn("mb-2 shrink-0", hero && "mb-0 h-14 w-14 rounded-xl")}
                 title="Options"
               >
                 <Plus className="h-5 w-5" />
@@ -159,8 +163,11 @@ export function ChatInput({
             value={question}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
-            placeholder="Ask Veston your question..."
-            className="min-h-[52px] max-h-[200px] resize-none bg-input text-foreground placeholder:text-muted-foreground"
+            placeholder={placeholder || "Ask away..."}
+            className={cn(
+              "w-full flex-1 min-h-[52px] max-h-[200px] resize-none bg-input text-foreground placeholder:text-muted-foreground",
+              hero && "h-14 min-h-0 rounded-xl px-4 py-3 text-base"
+            )}
             rows={1}
           />
 
@@ -170,7 +177,7 @@ export function ChatInput({
               onClick={onCancel}
               size="icon"
               variant="outline"
-              className="mb-2 shrink-0"
+              className={cn("mb-2 shrink-0", hero && "mb-0 h-14 w-14 rounded-xl")}
               title="Stop"
             >
               <Square className="h-5 w-5" />
@@ -180,17 +187,19 @@ export function ChatInput({
               onClick={handleSend}
               disabled={isTyping || !question.trim()}
               size="icon"
-              className="mb-2 shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              className={cn("mb-2 shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50", hero && "mb-0 h-14 w-14 rounded-xl")}
             >
               <Send className="h-5 w-5" />
             </Button>
           )}
         </div>
-        <p className="mt-2 text-center text-xs text-muted-foreground/80">
-          {mode === "slow" ? "High (Slow)" : "Low (Fast)"}
-          {" • "}
-          {radmapping ? "Radmapping" : reportSearch ? "Report Search" : itSupportDocuments ? "IT Support Documents" : "Workflow: None"}
-        </p>
+        {!hero && (
+          <p className="mt-2 text-center text-xs text-muted-foreground/80">
+            {mode === "slow" ? "High (Slow)" : "Low (Fast)"}
+            {" · "}
+            {radmapping ? "Radmapping" : reportSearch ? "Report Search" : itSupportDocuments ? "IT Support Documents" : "Workflow: None"}
+          </p>
+        )}
       </div>
     </div>
   )
