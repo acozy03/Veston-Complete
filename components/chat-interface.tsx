@@ -591,7 +591,11 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
             <div
               className={cn(
                 "absolute inset-0 transition-all duration-300",
-                heroExiting ? "opacity-0 translate-y-4 pointer-events-none" : "opacity-100 translate-y-0",
+                // If current chat has no messages, always show hero.
+                // Only fade the hero out when transitioning into a chat that has messages.
+                heroExiting && hasMessages
+                  ? "opacity-0 translate-y-4 pointer-events-none"
+                  : "opacity-100 translate-y-0",
               )}
             >
               <div className="relative h-full w-full">
