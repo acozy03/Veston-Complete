@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Image from "next/image"
 import { Button } from "./ui/button"
 import { ScrollArea } from "./ui/scroll-area"
 import { Input } from "./ui/input"
@@ -182,6 +183,19 @@ export function ChatSidebar({
 
         <div className="border-t border-sidebar-border p-4">
           <div className="flex items-center gap-3">
+            {avatarUrl ? (
+              <Image
+                src={avatarUrl}
+                alt={userName || userEmail || "User"}
+                width={32}
+                height={32}
+                className="h-8 w-8 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-foreground text-xs font-semibold">
+                {(userName || userEmail || "U").slice(0,1).toUpperCase()}
+              </div>
+            )}
             <div className="flex-1 overflow-hidden">
               <p className="truncate text-sm font-medium text-sidebar-foreground">{userName || ""}</p>
               <p className="truncate text-xs text-sidebar-foreground/60">{userEmail || ""}</p>
