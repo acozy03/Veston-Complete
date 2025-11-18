@@ -1,11 +1,13 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import Image from "next/image"
 import { ScrollArea } from "./ui/scroll-area"
 import { cn } from "@/lib/utils"
 import type { Message } from "./chat-interface"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { Copy, Check } from "lucide-react"
 
 interface ChatMessagesProps {
   messages: Message[]
@@ -15,6 +17,7 @@ interface ChatMessagesProps {
 
 export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" })
@@ -35,6 +38,9 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
       <div className="mx-auto w-full max-w-5xl px-6 py-10">
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent overflow-hidden">
+              <Image src="/logo.png" alt="Veston" width={64} height={64} className="h-16 w-16 object-cover" />
+            </div>
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold text-foreground">How can Veston help you today?</h2>
               <p className="text-muted-foreground">Ask your first question to begin</p>
@@ -42,7 +48,14 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
           </div>
         ) : (
           <div className="space-y-2">
-            {messages.map((message) => (
+            {/** Hide accidental consecutive duplicate user messages visually */}
+            {messages
+              .filter((m, i, arr) => {
+                if (i === 0) return true
+                const prev = arr[i - 1]
+                return !(m.role === prev.role && (m.content || "").trim() === (prev.content || "").trim())
+              })
+              .map((message) => (
               <div key={message.id} className="w-full">
                 {message.role === "assistant" ? (
                   <div className="w-full border-b border-border/60 bg-background/60 px-2 py-6 sm:px-0">
@@ -85,6 +98,30 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
                       >
                         {message.content}
                       </ReactMarkdown>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-end gap-2 text-xs text-muted-foreground">
+                      <button
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-muted/60"
+                        title={copiedId === message.id ? "Copied" : "Copy"}
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(message.content || "")
+                            setCopiedId(message.id)
+                            setTimeout(() => setCopiedId(null), 1500)
+                          } catch {}
+                        }}
+                      >
+                        {copiedId === message.id ? (
+                          <>
+                            <Check className="h-3.5 w-3.5" /> Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" /> Copy
+                          </>
+                        )}
+                      </button>
                     </div>
 
                     {message.sources && message.sources.length > 0 && (
@@ -183,4 +220,3 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
     </ScrollArea>
   )
 }
-

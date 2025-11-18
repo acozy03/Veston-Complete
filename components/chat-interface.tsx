@@ -293,7 +293,13 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       timestamp,
     }
 
-    const updatedMessages = [...(activeChat?.messages ?? []), userMessage]
+    // Prevent accidental consecutive duplicate sends of the same content
+    const last = activeChat?.messages?.[activeChat.messages.length - 1]
+    if (last && last.role === "user" && (last.content || "").trim() === question.trim()) {
+      // If the previous message is identical, skip adding another local copy
+      // The server will still process the existing one
+    } else {
+      const updatedMessages = [...(activeChat?.messages ?? []), userMessage]
 
     setChats((prevChats) =>
       prevChats.map((chat) => {
@@ -317,6 +323,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         return chat
       }),
     )
+    }
 
     setIsTyping(true)
 
