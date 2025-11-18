@@ -129,24 +129,21 @@ export function ChatSidebar({
               <p className="px-3 py-8 text-center text-sm text-sidebar-foreground/60">No chats yet</p>
             ) : (
               displayChats.map(({ chat }) => (
-                <div
+                <button
                   key={chat.id}
+                  type="button"
+                  onClick={() => onSelectChat(chat.id)}
                   className={cn(
-                    "flex w-[14.5rem] items-center rounded-lg px-2 pr-2 py-2 text-sm transition-colors hover:bg-sidebar-accent",
+                    "flex w-[14.5rem] items-center rounded-lg px-2 pr-2 py-2 text-left text-sm transition-colors hover:bg-sidebar-accent",
                     currentChatId === chat.id && "bg-sidebar-accent",
                   )}
                 >
-                  <button
-                    onClick={() => onSelectChat(chat.id)}
-                    className="min-w-0 flex-1 text-left"
-                  >
+                  <div className="min-w-0 flex-1">
                     <div className="min-w-0">
-                      <div className="min-w-0">
-                        <span className="block truncate text-sidebar-foreground">{chat.title}</span>
-                      </div>
-                      {/* Preview removed per request */}
+                      <span className="block truncate text-sidebar-foreground">{chat.title}</span>
                     </div>
-                  </button>
+                    {/* Preview removed per request */}
+                  </div>
                   <div className="ml-1 shrink-0">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -175,7 +172,7 @@ export function ChatSidebar({
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>

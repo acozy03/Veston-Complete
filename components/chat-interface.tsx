@@ -74,13 +74,13 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const heroTitles = [
     (name?: string) => name ? `Hey, ${name}. Ready to dive in?` : "Hey there. Ready to dive in?",
     (name?: string) => name ? `Hi ${name}, what can I help with?` : "Hi there, what can I help with?",
-    () => "What should we work on today?",
+    () => "What should we figure out today?",
     () => "Ask anything — I’m listening",
-    () => "Need answers or a quick draft?",
-    () => "Turn ideas into results",
+    () => "Need answers? Veston is here!",
+    () => "How can I assist you today?",
     () => "Ask away — I’ll handle the rest",
     () => "Your AI teammate is ready",
-    () => "From data to docs in seconds",
+    () => "Veston is always listening...",
     () => "Let’s get something done",
   ] as const
   const [heroTitle, setHeroTitle] = useState<string>("")
