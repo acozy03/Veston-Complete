@@ -8,7 +8,6 @@ export async function POST(req: Request) {
   try {
     const {
       question,
-      history = [],
       chatId,
       fast,
       slow,
@@ -19,7 +18,6 @@ export async function POST(req: Request) {
       noWorkflow,
     }: {
       question?: string
-      history?: Array<{ role: string; content: string }>
       chatId?: string
       fast?: boolean
       slow?: boolean
@@ -35,7 +33,6 @@ export async function POST(req: Request) {
       const preview = typeof question === 'string' ? (question.length > 80 ? question.slice(0, 80) + '...' : question) : ''
       console.log('[api/chat] request', {
         chatId,
-        historyLen: Array.isArray(history) ? history.length : 0,
         mode,
         fast: fast === true,
         slow: slow === true,
@@ -121,7 +118,6 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         question: effectiveQuestion,
-        history,
         // forward mode flags so n8n can choose models
         mode,
         fast: fast === true,
@@ -292,7 +288,6 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
       classifier_path: 'N8N_CLASSIFIER',
       payload: {
         question: effectiveQuestion,
-        history,
         mode,
         fast: fast === true,
         slow: slow === true,

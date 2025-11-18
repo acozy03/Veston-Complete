@@ -321,12 +321,10 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     setIsTyping(true)
 
     try {
-      const historyPayload = updatedMessages.map((message) => ({ role: message.role, content: message.content }))
       const controller = new AbortController()
       setAbortController(controller)
       const payload = {
         question,
-        history: historyPayload,
         chatId: requestChatId,
         // Pass selected response speed upstream
         fast: mode === "fast",
