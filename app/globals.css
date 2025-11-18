@@ -273,3 +273,19 @@ html.dark {
     text-align: left;
   }
 }
+
+/* -----------------------------------------------------
+   UI tweaks
+   ----------------------------------------------------- */
+/* Hide scrollbar inside the chat textarea while keeping scroll behavior */
+[data-slot="textarea"] {
+  /* Firefox */
+  scrollbar-width: none;
+  /* IE/Edge */
+  -ms-overflow-style: none;
+}
+[data-slot="textarea"]::-webkit-scrollbar {
+  /* Chrome/Safari/Opera */
+  width: 0;
+  height: 0;
+}
