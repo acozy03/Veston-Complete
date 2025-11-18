@@ -532,7 +532,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   }
 
   return (
-    <div className="flex h-screen bg-background dark">
+    <div className="flex h-screen min-h-0 bg-background dark">
       <ChatSidebar
         chats={chats}
         currentChatId={currentChatId}
@@ -546,7 +546,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         avatarUrl={user?.avatarUrl}
       />
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 min-h-0 flex-col">
         <header className="flex items-center gap-3 border-b border-border bg-background px-4 py-3 lg:hidden">
           <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}>
             <Menu className="h-5 w-5" />
@@ -555,9 +555,9 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           <ThemeToggle />
         </header>
 
-        <div className="relative flex flex-1">
+        <div className="relative flex flex-1 min-h-0 overflow-y-hidden">
           {/* Chat view (fades in) */}
-          <div className={cn("flex flex-1 flex-col transition-opacity duration-300", hasMessages ? "opacity-100" : "opacity-0 pointer-events-none") }>
+          <div className={cn("flex flex-1 min-h-0 flex-col transition-opacity duration-300", hasMessages ? "opacity-100" : "opacity-0 pointer-events-none") }>
             <ChatMessages messages={currentChat?.messages || []} isTyping={isTyping} user={user} />
             <ChatInput
               onSendQuestion={handleSendQuestion}

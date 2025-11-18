@@ -36,26 +36,15 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
   return (
     <ScrollArea className="flex-1">
       <div className="mx-auto w-full max-w-5xl px-6 py-10">
-        {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent overflow-hidden">
-              <Image src="/logo.png" alt="Veston" width={64} height={64} className="h-16 w-16 object-cover" />
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold text-foreground">How can Veston help you today?</h2>
-              <p className="text-muted-foreground">Ask your first question to begin</p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {/** Hide accidental consecutive duplicate user messages visually */}
-            {messages
-              .filter((m, i, arr) => {
-                if (i === 0) return true
-                const prev = arr[i - 1]
-                return !(m.role === prev.role && (m.content || "").trim() === (prev.content || "").trim())
-              })
-              .map((message) => (
+        <div className="space-y-2">
+          {/** Hide accidental consecutive duplicate user messages visually */}
+          {messages
+            .filter((m, i, arr) => {
+              if (i === 0) return true
+              const prev = arr[i - 1]
+              return !(m.role === prev.role && (m.content || "").trim() === (prev.content || "").trim())
+            })
+            .map((message) => (
               <div key={message.id} className="w-full">
                 {message.role === "assistant" ? (
                   <div className="w-full border-b border-border/60 bg-background/60 px-2 py-6 sm:px-0">
@@ -215,7 +204,6 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
 
             <div ref={bottomRef} />
           </div>
-        )}
       </div>
     </ScrollArea>
   )
