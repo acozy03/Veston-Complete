@@ -127,7 +127,7 @@ export function ChatInput({
                     radmapping && "bg-accent text-accent-foreground",
                   )}
                 >
-                  Radmapping
+                  RadMapping+
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={(e) => {
@@ -189,7 +189,7 @@ export function ChatInput({
             {RAG
               ? "Data Analysis"
               : radmapping
-                ? "Radmapping"
+                ? "RadMapping+"
                 : "Workflow: None"}
           </p>
         )}

@@ -148,13 +148,16 @@ export function ChatSidebar({
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
+                          asChild
                           variant="ghost"
                           size="icon"
                           aria-label="Chat actions"
                           className="h-5 w-5 rounded-md p-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-transparent"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="flex items-center justify-center">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </span>
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" sideOffset={6} onClick={(e) => e.stopPropagation()}>
