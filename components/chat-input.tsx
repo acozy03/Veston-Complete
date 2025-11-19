@@ -23,10 +23,11 @@ interface ChatInputProps {
   radmapping: boolean
   reportSearch: boolean
   itSupportDocuments: boolean
+  RAG: boolean
   isTyping: boolean
   onCancel: () => void
   onToggleWorkflow: (
-    name: "radmapping" | "reportSearch" | "itSupportDocuments",
+    name: "radmapping" | "reportSearch" | "itSupportDocuments" | "RAG",
     value: boolean,
   ) => void
   hero?: boolean
@@ -40,6 +41,7 @@ export function ChatInput({
   radmapping,
   reportSearch,
   itSupportDocuments,
+  RAG,
   isTyping,
   onCancel,
   onToggleWorkflow,
@@ -73,8 +75,8 @@ export function ChatInput({
   }
 
   return (
-    <div className={cn(hero ? "p-0" : "border-t border-border bg-background p-4") }>
-      <div className={cn("mx-auto", hero ? "max-w-3xl" : "max-w-3xl") }>
+    <div className={cn(hero ? "p-0" : "border-t border-border bg-background p-4")}>
+      <div className={cn("mx-auto", hero ? "max-w-3xl" : "max-w-3xl")}>
         <div className="relative flex items-end gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -141,7 +143,7 @@ export function ChatInput({
                     reportSearch && "bg-accent text-accent-foreground",
                   )}
                 >
-                  Report Search
+                  Report Retrieval
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={(e) => {
@@ -153,7 +155,19 @@ export function ChatInput({
                     itSupportDocuments && "bg-accent text-accent-foreground",
                   )}
                 >
-                  IT Support Documents
+                  Support Document Retrieval
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    onToggleWorkflow("RAG", !RAG)
+                  }}
+                  className={cn(
+                    "cursor-pointer",
+                    RAG && "bg-accent text-accent-foreground",
+                  )}
+                >
+                  Data Analysis
                 </DropdownMenuItem>
               </div>
             </DropdownMenuContent>
@@ -166,7 +180,7 @@ export function ChatInput({
             placeholder={placeholder || "Ask away..."}
             className={cn(
               "w-full flex-1 min-h-[52px] max-h-[200px] resize-none bg-input text-foreground placeholder:text-muted-foreground",
-              hero && "h-14 min-h-0 rounded-xl px-4 py-3 text-base"
+              hero && "h-14 min-h-0 rounded-xl px-4 py-3 text-base",
             )}
             rows={1}
           />
@@ -187,7 +201,10 @@ export function ChatInput({
               onClick={handleSend}
               disabled={isTyping || !question.trim()}
               size="icon"
-              className={cn("mb-2 shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50", hero && "mb-0 h-14 w-14 rounded-xl")}
+              className={cn(
+                "mb-2 shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
+                hero && "mb-0 h-14 w-14 rounded-xl",
+              )}
             >
               <Send className="h-5 w-5" />
             </Button>
@@ -197,7 +214,15 @@ export function ChatInput({
           <p className="mt-2 text-center text-xs text-muted-foreground/80">
             {mode === "slow" ? "High (Slow)" : "Low (Fast)"}
             {" · "}
-            {radmapping ? "Radmapping" : reportSearch ? "Report Search" : itSupportDocuments ? "IT Support Documents" : "Workflow: None"}
+            {RAG
+              ? "Data Retrieval"
+              : radmapping
+                ? "Radmapping"
+                : reportSearch
+                  ? "Report Search"
+                  : itSupportDocuments
+                    ? "IT Support Documents"
+                    : "Workflow: None"}
           </p>
         )}
       </div>

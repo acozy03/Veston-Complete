@@ -15,6 +15,7 @@ export async function POST(req: Request) {
       radmapping,
       reportSearch,
       itSupportDocuments,
+      RAG,
       noWorkflow,
     }: {
       question?: string
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
       radmapping?: boolean
       reportSearch?: boolean
       itSupportDocuments?: boolean
+      RAG?: boolean
       noWorkflow?: boolean
     } = await req.json()
 
@@ -39,6 +41,7 @@ export async function POST(req: Request) {
         radmapping: radmapping === true,
         reportSearch: reportSearch === true,
         itSupportDocuments: itSupportDocuments === true,
+        RAG: RAG === true,
         noWorkflow: noWorkflow === true,
         questionPreview: preview,
       })
@@ -125,6 +128,7 @@ export async function POST(req: Request) {
         radmapping: radmapping === true,
         reportSearch: reportSearch === true,
         itSupportDocuments: itSupportDocuments === true,
+        RAG: RAG === true,
         noWorkflow: noWorkflow === true,
         // helpful context
         chatId: effectiveChatId,
@@ -294,6 +298,7 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
         radmapping: radmapping === true,
         reportSearch: reportSearch === true,
         itSupportDocuments: itSupportDocuments === true,
+        RAG: RAG === true,
         noWorkflow: noWorkflow === true,
       },
       status: 'succeeded',
