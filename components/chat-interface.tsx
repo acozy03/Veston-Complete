@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import Image from "next/image"
 import { ChatSidebar } from "./chat-sidebar"
@@ -240,13 +240,39 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const currentChat = chats.find((chat) => chat.id === currentChatId)
   const hasMessages = (currentChat?.messages?.length || 0) > 0
 
-  // Smooth transition: briefly keep hero visible while chat view fades in
+  // Smooth transition between hero and chat view.
+  // - When transitioning from an empty chat to one with messages, we briefly keep the hero
+  //   visible while the chat view fades in.
+  // - When going back to an empty chat, the hero fades back in while the chat view fades out.
+  // A ref is used so overlapping timeouts from rapid chat switches cannot fight over state.
   const [heroExiting, setHeroExiting] = useState(false)
+  const heroExitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
-    if (hasMessages) {
-      setHeroExiting(true)
-      const id = setTimeout(() => setHeroExiting(false), 350)
-      return () => clearTimeout(id)
+    // Always cancel any in-flight animation timeout before scheduling a new one.
+    if (heroExitTimeoutRef.current) {
+      clearTimeout(heroExitTimeoutRef.current)
+      heroExitTimeoutRef.current = null
+    }
+
+    // If the current chat has no messages, the hero should be fully visible and not "exiting".
+    if (!hasMessages) {
+      setHeroExiting(false)
+      return
+    }
+
+    // Current chat has messages: run a one-shot "hero exiting" animation.
+    setHeroExiting(true)
+    heroExitTimeoutRef.current = setTimeout(() => {
+      setHeroExiting(false)
+      heroExitTimeoutRef.current = null
+    }, 350)
+
+    return () => {
+      if (heroExitTimeoutRef.current) {
+        clearTimeout(heroExitTimeoutRef.current)
+        heroExitTimeoutRef.current = null
+      }
     }
   }, [hasMessages])
 
@@ -556,7 +582,12 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
         <div className="relative flex flex-1 min-h-0 overflow-y-hidden">
           {/* Chat view (fades in) */}
-          <div className={cn("flex flex-1 min-h-0 flex-col transition-opacity duration-300", hasMessages ? "opacity-100" : "opacity-0 pointer-events-none") }>
+          <div
+            className={cn(
+              "flex flex-1 min-h-0 flex-col transition-opacity duration-300",
+              hasMessages ? "opacity-100" : "opacity-0 pointer-events-none",
+            )}
+          >
             <ChatMessages messages={currentChat?.messages || []} isTyping={isTyping} user={user} />
             <ChatInput
               onSendQuestion={handleSendQuestion}
@@ -579,57 +610,53 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
             />
           </div>
 
-          {/* Hero overlay (fades out) */}
-          {(!hasMessages || heroExiting) && (
-            <div
-              className={cn(
-                "absolute inset-0 transition-all duration-300",
-                // If current chat has no messages, always show hero.
-                // Only fade the hero out when transitioning into a chat that has messages.
-                heroExiting && hasMessages
-                  ? "opacity-0 translate-y-4 pointer-events-none"
-                  : "opacity-100 translate-y-0",
-              )}
-            >
-              <div className="relative h-full w-full">
-                {/* Center the chat bar exactly in the viewport */}
-                <div className="absolute left-1/2 top-1/2 w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 px-6">
-                  <div className="relative">
-                    {/* Logo + title sit just above the chat bar */}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-6 flex w-full max-w-3xl flex-col items-center gap-4 px-2">
-                      <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl bg-accent">
-                        <Image src="/logo.png" alt="Veston" width={64} height={64} className="h-16 w-16 object-cover" />
-                      </div>
-                      <h2 className="max-w-2xl text-center text-2xl font-semibold text-foreground">
-                        {heroTitle}
-                      </h2>
+          {/* Hero overlay (fades in/out) */}
+          <div
+            className={cn(
+              "absolute inset-0 transition-opacity duration-200",
+              !hasMessages && !heroExiting
+                ? "opacity-100 pointer-events-auto"
+                : "opacity-0 pointer-events-none",
+            )}
+          >
+            <div className="relative h-full w-full">
+              {/* Center the chat bar exactly in the viewport */}
+              <div className="absolute left-1/2 top-1/2 w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 px-6">
+                <div className="relative">
+                  {/* Logo + title sit just above the chat bar */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-6 flex w-full max-w-3xl flex-col items-center gap-4 px-2">
+                    <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl bg-accent">
+                      <Image src="/logo.png" alt="Veston" width={64} height={64} className="h-16 w-16 object-cover" />
                     </div>
-                    <ChatInput
-                      hero
-                      placeholder="Ask away..."
-                      onSendQuestion={handleSendQuestion}
-                      mode={mode}
-                      onChangeMode={setMode}
-                      radmapping={radmapping}
-                      RAG={RAG}
-                      isTyping={isTyping}
-                      onCancel={handleCancel}
-                      onToggleWorkflow={(name, value) => {
-                        if (name === "radmapping") {
-                          setRadmapping(value)
-                          if (value) { setDataRetrieval(false) }
-                        }
-                        if (name === "RAG") {
-                          setDataRetrieval(value)
-                          if (value) { setRadmapping(false) }
-                        }
-                      }}
-                    />
+                    <h2 className="max-w-2xl text-center text-2xl font-semibold text-foreground">
+                      {heroTitle}
+                    </h2>
                   </div>
+                  <ChatInput
+                    hero
+                    placeholder="Ask away..."
+                    onSendQuestion={handleSendQuestion}
+                    mode={mode}
+                    onChangeMode={setMode}
+                    radmapping={radmapping}
+                    RAG={RAG}
+                    isTyping={isTyping}
+                    onCancel={handleCancel}
+                    onToggleWorkflow={(name, value) => {
+                      if (name === "radmapping") {
+                        setRadmapping(value)
+                        if (value) { setDataRetrieval(false) }
+                      }
+                      if (name === "RAG") {
+                        setDataRetrieval(value)
+                        if (value) { setRadmapping(false) }
+                      }
+                    }}
+                  />
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
