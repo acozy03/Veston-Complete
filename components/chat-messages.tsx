@@ -89,29 +89,7 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
                       </ReactMarkdown>
                     </div>
 
-                    <div className="mt-3 flex items-center justify-end gap-2 text-xs text-muted-foreground">
-                      <button
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-muted/60"
-                        title={copiedId === message.id ? "Copied" : "Copy"}
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(message.content || "")
-                            setCopiedId(message.id)
-                            setTimeout(() => setCopiedId(null), 1500)
-                          } catch {}
-                        }}
-                      >
-                        {copiedId === message.id ? (
-                          <>
-                            <Check className="h-3.5 w-3.5" /> Copied
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-3.5 w-3.5" /> Copy
-                          </>
-                        )}
-                      </button>
-                    </div>
+                    {/** Moved copy button below sources, alongside timestamp */}
 
                     {message.sources && message.sources.length > 0 && (
                       <div className="mt-4 w-full rounded-md border border-border/60 bg-background/80 p-3 text-sm">
@@ -143,16 +121,38 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
                       </div>
                     )}
 
-                    {message.timestamp && (
-                      <div className="mt-2 text-xs text-muted-foreground opacity-70">
-                        {formatTimestamp(message.timestamp)}
+                    {(message.timestamp || true) && (
+                      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground opacity-70">
+                        <div>{message.timestamp ? formatTimestamp(message.timestamp) : ''}</div>
+                        <button
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-muted/60"
+                          title={copiedId === message.id ? "Copied" : "Copy"}
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(message.content || "")
+                              setCopiedId(message.id)
+                              setTimeout(() => setCopiedId(null), 1500)
+                            } catch {}
+                          }}
+                        >
+                          {copiedId === message.id ? (
+                            <>
+                              <Check className="h-3.5 w-3.5" /> Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3.5 w-3.5" /> Copy
+                            </>
+                          )}
+                        </button>
                       </div>
                     )}
                   </div>
                 ) : (
                   <div className="flex w-full justify-end py-4">
-                    <div className="max-w-[85%] rounded-2xl bg-secondary px-4 py-2 text-secondary-foreground">
-                      <div className="text-base leading-relaxed break-words [&_a]:underline [&_a]:text-foreground">
+                    <div className="max-w-[85%]">
+                      <div className="w-full rounded-2xl bg-secondary px-4 py-2 text-secondary-foreground">
+                        <div className="text-base leading-relaxed break-words [&_a]:underline [&_a]:text-foreground">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
@@ -179,6 +179,7 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
                         >
                           {message.content}
                         </ReactMarkdown>
+                        </div>
                       </div>
 
                       {message.timestamp && (
