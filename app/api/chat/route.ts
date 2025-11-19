@@ -13,8 +13,6 @@ export async function POST(req: Request) {
       slow,
       mode,
       radmapping,
-      reportSearch,
-      itSupportDocuments,
       RAG,
       noWorkflow,
     }: {
@@ -24,8 +22,6 @@ export async function POST(req: Request) {
       slow?: boolean
       mode?: "fast" | "slow" | string
       radmapping?: boolean
-      reportSearch?: boolean
-      itSupportDocuments?: boolean
       RAG?: boolean
       noWorkflow?: boolean
     } = await req.json()
@@ -39,8 +35,6 @@ export async function POST(req: Request) {
         fast: fast === true,
         slow: slow === true,
         radmapping: radmapping === true,
-        reportSearch: reportSearch === true,
-        itSupportDocuments: itSupportDocuments === true,
         RAG: RAG === true,
         noWorkflow: noWorkflow === true,
         questionPreview: preview,
@@ -126,8 +120,6 @@ export async function POST(req: Request) {
         fast: fast === true,
         slow: slow === true,
         radmapping: radmapping === true,
-        reportSearch: reportSearch === true,
-        itSupportDocuments: itSupportDocuments === true,
         RAG: RAG === true,
         noWorkflow: noWorkflow === true,
         // helpful context
@@ -296,8 +288,6 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
         fast: fast === true,
         slow: slow === true,
         radmapping: radmapping === true,
-        reportSearch: reportSearch === true,
-        itSupportDocuments: itSupportDocuments === true,
         RAG: RAG === true,
         noWorkflow: noWorkflow === true,
       },

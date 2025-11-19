@@ -21,13 +21,11 @@ interface ChatInputProps {
   mode: "fast" | "slow"
   onChangeMode: (mode: "fast" | "slow") => void
   radmapping: boolean
-  reportSearch: boolean
-  itSupportDocuments: boolean
   RAG: boolean
   isTyping: boolean
   onCancel: () => void
   onToggleWorkflow: (
-    name: "radmapping" | "reportSearch" | "itSupportDocuments" | "RAG",
+    name: "radmapping" | "RAG",
     value: boolean,
   ) => void
   hero?: boolean
@@ -39,8 +37,6 @@ export function ChatInput({
   mode,
   onChangeMode,
   radmapping,
-  reportSearch,
-  itSupportDocuments,
   RAG,
   isTyping,
   onCancel,
@@ -136,30 +132,6 @@ export function ChatInput({
                 <DropdownMenuItem
                   onSelect={(e) => {
                     e.preventDefault()
-                    onToggleWorkflow("reportSearch", !reportSearch)
-                  }}
-                  className={cn(
-                    "cursor-pointer",
-                    reportSearch && "bg-accent text-accent-foreground",
-                  )}
-                >
-                  Report Retrieval
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={(e) => {
-                    e.preventDefault()
-                    onToggleWorkflow("itSupportDocuments", !itSupportDocuments)
-                  }}
-                  className={cn(
-                    "cursor-pointer",
-                    itSupportDocuments && "bg-accent text-accent-foreground",
-                  )}
-                >
-                  Support Document Retrieval
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={(e) => {
-                    e.preventDefault()
                     onToggleWorkflow("RAG", !RAG)
                   }}
                   className={cn(
@@ -213,19 +185,16 @@ export function ChatInput({
         {!hero && (
           <p className="mt-2 text-center text-xs text-muted-foreground/80">
             {mode === "slow" ? "High (Slow)" : "Low (Fast)"}
-            {" · "}
+            {" • "}
             {RAG
-              ? "Data Retrieval"
+              ? "Data Analysis"
               : radmapping
                 ? "Radmapping"
-                : reportSearch
-                  ? "Report Search"
-                  : itSupportDocuments
-                    ? "IT Support Documents"
-                    : "Workflow: None"}
+                : "Workflow: None"}
           </p>
         )}
       </div>
     </div>
   )
 }
+

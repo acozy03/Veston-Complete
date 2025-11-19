@@ -64,8 +64,6 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const [userEmail, setUserEmail] = useState<string>(user?.email || "")
   const [mode, setMode] = useState<"fast" | "slow">("fast")
   const [radmapping, setRadmapping] = useState<boolean>(false)
-  const [reportSearch, setReportSearch] = useState<boolean>(false)
-  const [itSupportDocuments, setItSupportDocuments] = useState<boolean>(false)
   const [RAG, setDataRetrieval] = useState<boolean>(false)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
 
@@ -376,12 +374,10 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         mode,
         // Requested workflows (mutually exclusive)
         radmapping,
-        reportSearch,
-        itSupportDocuments,
-        // Explicit default-case flag for classifier routing
+        // Data Analysis / RAG
         RAG,
         // Explicit default-case flag for classifier routing
-        noWorkflow: !radmapping && !reportSearch && !itSupportDocuments && !RAG,
+        noWorkflow: !radmapping && !RAG,
       }
       // Client-side debug log for visibility in devtools
       try { console.log("POST /api/chat payload", payload) } catch {}
@@ -567,28 +563,17 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
               mode={mode}
               onChangeMode={setMode}
               radmapping={radmapping}
-              reportSearch={reportSearch}
-              itSupportDocuments={itSupportDocuments}
               RAG={RAG}
               isTyping={isTyping}
               onCancel={handleCancel}
               onToggleWorkflow={(name, value) => {
-                // Enforce mutual exclusivity: only one workflow true at most
                 if (name === "radmapping") {
                   setRadmapping(value)
-                  if (value) { setReportSearch(false); setItSupportDocuments(false); setDataRetrieval(false) }
-                }
-                if (name === "reportSearch") {
-                  setReportSearch(value)
-                  if (value) { setRadmapping(false); setItSupportDocuments(false); setDataRetrieval(false) }
-                }
-                if (name === "itSupportDocuments") {
-                  setItSupportDocuments(value)
-                  if (value) { setRadmapping(false); setReportSearch(false); setDataRetrieval(false) }
+                  if (value) { setDataRetrieval(false) }
                 }
                 if (name === "RAG") {
                   setDataRetrieval(value)
-                  if (value) { setRadmapping(false); setReportSearch(false); setItSupportDocuments(false) }
+                  if (value) { setRadmapping(false) }
                 }
               }}
             />
@@ -626,27 +611,17 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
                       mode={mode}
                       onChangeMode={setMode}
                       radmapping={radmapping}
-                      reportSearch={reportSearch}
-                      itSupportDocuments={itSupportDocuments}
                       RAG={RAG}
                       isTyping={isTyping}
                       onCancel={handleCancel}
                       onToggleWorkflow={(name, value) => {
                         if (name === "radmapping") {
                           setRadmapping(value)
-                          if (value) { setReportSearch(false); setItSupportDocuments(false); setDataRetrieval(false) }
-                        }
-                        if (name === "reportSearch") {
-                          setReportSearch(value)
-                          if (value) { setRadmapping(false); setItSupportDocuments(false); setDataRetrieval(false) }
-                        }
-                        if (name === "itSupportDocuments") {
-                          setItSupportDocuments(value)
-                          if (value) { setRadmapping(false); setReportSearch(false); setDataRetrieval(false) }
+                          if (value) { setDataRetrieval(false) }
                         }
                         if (name === "RAG") {
                           setDataRetrieval(value)
-                          if (value) { setRadmapping(false); setReportSearch(false); setItSupportDocuments(false) }
+                          if (value) { setRadmapping(false) }
                         }
                       }}
                     />
