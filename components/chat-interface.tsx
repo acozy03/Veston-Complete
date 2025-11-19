@@ -66,6 +66,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const [radmapping, setRadmapping] = useState<boolean>(false)
   const [RAG, setDataRetrieval] = useState<boolean>(false)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
+  const [loadingChatId, setLoadingChatId] = useState<string | null>(null)
 
   const supabase = useMemo(() => createClient(), [])
 
@@ -83,6 +84,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     () => "Let’s get something done",
   ] as const
   const [heroTitle, setHeroTitle] = useState<string>("")
+  const newlyCreatedChatIds = useRef<Set<string>>(new Set())
 
   // Load chats on mount if none provided
   useEffect(() => {
@@ -219,6 +221,9 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       timestamp: new Date(m.created_at as string),
       sources: sourcesByMessage[String(m.id)] || undefined,
     }))
+    if (msgs.length > 0) {
+      newlyCreatedChatIds.current.delete(chatId)
+    }
     // Avoid wiping optimistic local messages if the server hasn't written any yet
     setChats((prev) =>
       prev.map((c) => {
@@ -239,6 +244,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
   const currentChat = chats.find((chat) => chat.id === currentChatId)
   const hasMessages = (currentChat?.messages?.length || 0) > 0
+  const isLoadingCurrentChat = loadingChatId === currentChatId
 
   // Smooth transition between hero and chat view.
   // - When transitioning from an empty chat to one with messages, we briefly keep the hero
@@ -247,6 +253,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   // A ref is used so overlapping timeouts from rapid chat switches cannot fight over state.
   const [heroExiting, setHeroExiting] = useState(false)
   const heroExitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const shouldShowHero = !hasMessages && !heroExiting && !isLoadingCurrentChat
 
   useEffect(() => {
     // Always cancel any in-flight animation timeout before scheduling a new one.
@@ -276,11 +283,39 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     }
   }, [hasMessages])
 
-  // Load messages when switching chats
+  // Load messages when switching chats; show spinner only for existing chats
   useEffect(() => {
-    if (currentChatId) {
-      setServerChatId(currentChatId)
-      void loadMessages(currentChatId)
+    if (!currentChatId) {
+      setLoadingChatId(null)
+      return
+    }
+
+    setServerChatId(currentChatId)
+
+    const shouldShowLoader =
+      !newlyCreatedChatIds.current.has(currentChatId) &&
+      ((currentChat?.messages?.length || 0) === 0)
+
+    if (shouldShowLoader) {
+      setLoadingChatId(currentChatId)
+    }
+
+    let cancelled = false
+
+    const run = async () => {
+      try {
+        await loadMessages(currentChatId)
+      } finally {
+        if (!cancelled) {
+          setLoadingChatId((prev) => (prev === currentChatId ? null : prev))
+        }
+      }
+    }
+
+    void run()
+
+    return () => {
+      cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentChatId])
@@ -303,6 +338,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         messages: [],
         createdAt: new Date(),
       }
+      newlyCreatedChatIds.current.add(local.id)
       setChats([local, ...chats])
       setCurrentChatId(local.id)
       setServerChatId("")
@@ -314,6 +350,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       messages: [],
       createdAt: new Date(data.created_at as string),
     }
+    newlyCreatedChatIds.current.add(created.id)
     setChats((prev) => [created, ...prev])
     setCurrentChatId(created.id)
     setServerChatId(created.id)
@@ -341,6 +378,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         messages: [],
         createdAt: new Date((data?.created_at as string) || Date.now()),
       }
+      newlyCreatedChatIds.current.add(activeChat.id)
       setChats([activeChat, ...chats])
       setCurrentChatId(activeChat.id)
       if (createdId) setServerChatId(createdId)
@@ -543,6 +581,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           .eq("user_email", userEmail || "")
       } catch {}
       const updatedChats = chats.filter((chat) => chat.id !== chatId)
+      newlyCreatedChatIds.current.delete(chatId)
       setChats(updatedChats)
       if (currentChatId === chatId && updatedChats.length > 0) {
         setCurrentChatId(updatedChats[0].id)
@@ -613,10 +652,8 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           {/* Hero overlay (fades in/out) */}
           <div
             className={cn(
-              "absolute inset-0 transition-opacity duration-200",
-              !hasMessages && !heroExiting
-                ? "opacity-100 pointer-events-auto"
-                : "opacity-0 pointer-events-none",
+              "absolute inset-0 z-0 transition-opacity duration-200",
+              shouldShowHero ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
             )}
           >
             <div className="relative h-full w-full">
@@ -657,6 +694,13 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
               </div>
             </div>
           </div>
+
+          {isLoadingCurrentChat && !hasMessages && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/95 text-muted-foreground transition-opacity duration-200">
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-border border-t-transparent" />
+              <p className="text-sm font-medium">Loading chat...</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
