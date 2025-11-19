@@ -59,6 +59,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   )
   const [currentChatId, setCurrentChatId] = useState<string>(initialChatId || "")
   const [isTyping, setIsTyping] = useState(false)
+  const [typingChatId, setTypingChatId] = useState<string | null>(null)
   const [serverChatId, setServerChatId] = useState<string>(initialChatId || "")
   const [userId, setUserId] = useState<string>("")
   const [userEmail, setUserEmail] = useState<string>(user?.email || "")
@@ -245,6 +246,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const currentChat = chats.find((chat) => chat.id === currentChatId)
   const hasMessages = (currentChat?.messages?.length || 0) > 0
   const isLoadingCurrentChat = loadingChatId === currentChatId
+  const currentChatIsTyping = isTyping && typingChatId === currentChatId
 
   // Smooth transition between hero and chat view.
   // - When transitioning from an empty chat to one with messages, we briefly keep the hero
@@ -424,7 +426,9 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     )
     }
 
+    const pendingChatId = activeChat?.id || currentChatId || null
     setIsTyping(true)
+    setTypingChatId(pendingChatId)
 
     try {
       const controller = new AbortController()
@@ -560,6 +564,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       )
     } finally {
       setIsTyping(false)
+      setTypingChatId(null)
       try { abortController?.abort() } catch {}
       setAbortController(null)
     }
@@ -568,6 +573,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const handleCancel = () => {
     try { abortController?.abort() } catch {}
     setIsTyping(false)
+    setTypingChatId(null)
     setAbortController(null)
   }
 
@@ -581,6 +587,10 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           .eq("user_email", userEmail || "")
       } catch {}
       const updatedChats = chats.filter((chat) => chat.id !== chatId)
+      if (typingChatId === chatId) {
+        setTypingChatId(null)
+        setIsTyping(false)
+      }
       newlyCreatedChatIds.current.delete(chatId)
       setChats(updatedChats)
       if (currentChatId === chatId && updatedChats.length > 0) {
@@ -627,7 +637,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
               hasMessages ? "opacity-100" : "opacity-0 pointer-events-none",
             )}
           >
-            <ChatMessages messages={currentChat?.messages || []} isTyping={isTyping} user={user} />
+            <ChatMessages messages={currentChat?.messages || []} isTyping={currentChatIsTyping} user={user} />
             <ChatInput
               onSendQuestion={handleSendQuestion}
               mode={mode}
