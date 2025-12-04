@@ -12,9 +12,9 @@ import { C1Component, ThemeProvider as C1ThemeProvider } from "@thesysai/genui-s
 
 const detectRenderer = (content?: string | null) => {
   if (typeof content !== "string") return "markdown" as const
-  return /<\s*content\s*>[\s\S]*<\s*\/\s*content\s*>/i.test(content) || /<\s*artifact\s*>/i.test(content)
-    ? ("c1" as const)
-    : ("markdown" as const)
+  const hasContentTag = /<\s*content(?:\s+[^>]*)?>[\s\S]*<\s*\/\s*content\s*>/i.test(content)
+  const hasArtifactTag = /<\s*artifact(?:\s+[^>]*)?>/i.test(content)
+  return hasContentTag || hasArtifactTag ? ("c1" as const) : ("markdown" as const)
 }
 
 interface ChatMessagesProps {

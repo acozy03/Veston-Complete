@@ -42,9 +42,9 @@ const generateId = () =>
 
 const detectRenderer = (content: string | null | undefined): "markdown" | "c1" => {
   if (typeof content !== "string") return "markdown"
-  return /<\s*content\s*>[\s\S]*<\s*\/\s*content\s*>/i.test(content) || /<\s*artifact\s*>/i.test(content)
-    ? "c1"
-    : "markdown"
+  const hasContentTag = /<\s*content(?:\s+[^>]*)?>[\s\S]*<\s*\/\s*content\s*>/i.test(content)
+  const hasArtifactTag = /<\s*artifact(?:\s+[^>]*)?>/i.test(content)
+  return hasContentTag || hasArtifactTag ? "c1" : "markdown"
 }
 
 const INITIAL_CHATS: Chat[] = []
