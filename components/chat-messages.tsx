@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import { ScrollArea } from "./ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -8,25 +8,13 @@ import type { Message } from "./chat-interface"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Copy, Check } from "lucide-react"
+import { C1Component, ThemeProvider as C1ThemeProvider } from "@thesysai/genui-sdk"
 
 const detectRenderer = (content?: string | null) => {
   if (typeof content !== "string") return "markdown" as const
   return /<\s*content\s*>[\s\S]*<\s*\/\s*content\s*>/i.test(content) || /<\s*artifact\s*>/i.test(content)
     ? ("c1" as const)
     : ("markdown" as const)
-}
-
-const parseC1Payload = (payload?: string | null) => {
-  if (typeof payload !== "string") return { content: null, artifact: null, thinking: null }
-  const extract = (tag: string) => {
-    const match = payload.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"))
-    return match ? match[1].trim() : null
-  }
-  return {
-    content: extract("content"),
-    artifact: extract("artifact"),
-    thinking: extract("thinking"),
-  }
 }
 
 interface ChatMessagesProps {
@@ -66,58 +54,62 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
             })
             .map((message) => {
               const renderer = message.renderer ?? detectRenderer(message.content)
-              const c1Parts = renderer === "c1" ? parseC1Payload(message.content) : null
-              const displayContent = renderer === "c1" ? c1Parts?.content || message.content : message.content
-              const artifact = renderer === "c1" ? c1Parts?.artifact : null
               return (
                 <div key={message.id} className="w-full">
                   {message.role === "assistant" ? (
                     <div className="w-full border-b border-border/60 bg-background/60 px-2 py-6 sm:px-0">
-                      <div className={cn("markdown text-foreground/90")}>
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            a: ({ node, href, children, ...props }) => {
-                              const url = typeof href === 'string' ? href : ''
-                              const isXlsx = /\.xlsx(\?|$)/i.test(url) || /filename=.*\.xlsx/i.test(url) || /application%2Fvnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/i.test(url)
-                              if (isXlsx && url) {
-                                const previewUrl = `/preview/xlsx?src=${encodeURIComponent(url)}`
-                                const downloadUrl = `/api/proxy-file?src=${encodeURIComponent(url)}&download=1`
+                      {renderer === "c1" ? (
+                        <div className="c1-renderer max-w-full overflow-hidden rounded-lg border border-border/80 bg-card/70 p-4">
+                          <C1ThemeProvider>
+                            <C1Component
+                              c1Response={message.content || ""}
+                              onAction={(action) => {
+                                // eslint-disable-next-line no-console
+                                console.log("C1 action", action)
+                              }}
+                            />
+                          </C1ThemeProvider>
+                        </div>
+                      ) : (
+                        <div className={cn("markdown text-foreground/90")}>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              a: ({ node, href, children, ...props }) => {
+                                const url = typeof href === 'string' ? href : ''
+                                const isXlsx = /\.xlsx(\?|$)/i.test(url) || /filename=.*\.xlsx/i.test(url) || /application%2Fvnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/i.test(url)
+                                if (isXlsx && url) {
+                                  const previewUrl = `/preview/xlsx?src=${encodeURIComponent(url)}`
+                                  const downloadUrl = `/api/proxy-file?src=${encodeURIComponent(url)}&download=1`
+                                  return (
+                                    <span>
+                                      <a href={previewUrl} target="_blank" rel="noopener noreferrer" {...props}>Open preview</a>
+                                      <span className="mx-2 opacity-50">·</span>
+                                      <a href={downloadUrl} rel="noopener noreferrer">Download</a>
+                                    </span>
+                                  )
+                                }
+                                return <a href={url} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
+                              },
+                              p: ({ node, ...props }) => (
+                                <p className="whitespace-pre-wrap" {...props} />
+                              ),
+                              code: ({ inline, className, children, ...props }) => {
+                                if (!inline) {
+                                  return (
+                                    <pre className="markdown-codeblock">
+                                      <code className={className} {...props}>{children}</code>
+                                    </pre>
+                                  )
+                                }
                                 return (
-                                  <span>
-                                    <a href={previewUrl} target="_blank" rel="noopener noreferrer" {...props}>Open preview</a>
-                                    <span className="mx-2 opacity-50">·</span>
-                                    <a href={downloadUrl} rel="noopener noreferrer">Download</a>
-                                  </span>
+                                  <code className={cn("markdown-codeinline", className)} {...props}>{children}</code>
                                 )
-                              }
-                              return <a href={url} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
-                            },
-                            p: ({ node, ...props }) => (
-                              <p className="whitespace-pre-wrap" {...props} />
-                            ),
-                            code: ({ inline, className, children, ...props }) => {
-                              if (!inline) {
-                                return (
-                                  <pre className="markdown-codeblock">
-                                    <code className={className} {...props}>{children}</code>
-                                  </pre>
-                                )
-                              }
-                              return (
-                                <code className={cn("markdown-codeinline", className)} {...props}>{children}</code>
-                              )
-                            },
-                          }}
-                        >
-                          {displayContent}
-                        </ReactMarkdown>
-                      </div>
-
-                      {artifact && (
-                        <div className="mt-4 rounded-md border border-border/60 bg-background/80 p-3 text-sm">
-                          <div className="mb-2 font-medium opacity-80">Artifact</div>
-                          <pre className="markdown-codeblock whitespace-pre-wrap text-left text-foreground/90">{artifact}</pre>
+                              },
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
                         </div>
                       )}
 
