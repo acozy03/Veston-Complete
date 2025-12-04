@@ -24,6 +24,7 @@ export type Message = {
   content: string
   timestamp: Date
   sources?: Source[]
+  renderer?: "markdown" | "c1"
 }
 
 export type Chat = {
@@ -38,6 +39,13 @@ const generateId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+const detectRenderer = (content: string | null | undefined): "markdown" | "c1" => {
+  if (typeof content !== "string") return "markdown"
+  return /<\s*content\s*>[\s\S]*<\s*\/\s*content\s*>/i.test(content) || /<\s*artifact\s*>/i.test(content)
+    ? "c1"
+    : "markdown"
+}
 
 const INITIAL_CHATS: Chat[] = []
 
@@ -64,6 +72,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const [userId, setUserId] = useState<string>("")
   const [userEmail, setUserEmail] = useState<string>(user?.email || "")
   const [mode, setMode] = useState<"fast" | "slow">("fast")
+  const [renderer, setRenderer] = useState<"markdown" | "c1">("markdown")
   const [radmapping, setRadmapping] = useState<boolean>(false)
   const [RAG, setDataRetrieval] = useState<boolean>(false)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
@@ -146,12 +155,25 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     } catch {}
   }, [])
 
+  useEffect(() => {
+    try {
+      const savedRenderer = typeof window !== "undefined" ? localStorage.getItem("chatRenderer") : null
+      if (savedRenderer === "markdown" || savedRenderer === "c1") setRenderer(savedRenderer)
+    } catch {}
+  }, [])
+
   // Persist chat mode preference
   useEffect(() => {
     try {
       if (typeof window !== "undefined") localStorage.setItem("chatMode", mode)
     } catch {}
   }, [mode])
+
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") localStorage.setItem("chatRenderer", renderer)
+    } catch {}
+  }, [renderer])
 
   const loadPreviews = async (items: Chat[]) => {
     await Promise.all(
@@ -221,6 +243,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       content: m.content as string,
       timestamp: new Date(m.created_at as string),
       sources: sourcesByMessage[String(m.id)] || undefined,
+      renderer: detectRenderer(m.content as string),
     }))
     if (msgs.length > 0) {
       newlyCreatedChatIds.current.delete(chatId)
@@ -392,6 +415,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       role: "user",
       content: question,
       timestamp,
+      renderer: "markdown",
     }
 
     // Prevent accidental consecutive duplicate sends of the same content
@@ -440,6 +464,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         fast: mode === "fast",
         slow: mode === "slow",
         mode,
+        renderer,
         // Requested workflows (mutually exclusive)
         radmapping,
         // Data Analysis / RAG
@@ -481,6 +506,15 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           ? (parsed as { reply: string }).reply
           : responseText
 
+      const responseRenderer: "markdown" | "c1" =
+        typeof parsed === "object" && parsed !== null && (parsed as any).renderer === "c1"
+          ? "c1"
+          : detectRenderer(
+              typeof parsed === "object" && parsed !== null && typeof (parsed as any).reply === "string"
+                ? ((parsed as any).reply as string)
+                : undefined,
+            )
+
       // Extract optional sources array from the response
       const sources: Source[] | undefined =
         typeof parsed === "object" && parsed !== null && Array.isArray((parsed as any).sources)
@@ -500,6 +534,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         content: replyText,
         timestamp: new Date(),
         sources,
+        renderer: responseRenderer,
       }
 
       setChats((prevChats) =>
@@ -550,6 +585,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         role: "assistant",
         content: fallbackMessage,
         timestamp: new Date(),
+        renderer: "markdown",
       }
 
       setChats((prevChats) =>
@@ -642,6 +678,8 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
               onSendQuestion={handleSendQuestion}
               mode={mode}
               onChangeMode={setMode}
+              renderer={renderer}
+              onChangeRenderer={setRenderer}
               radmapping={radmapping}
               RAG={RAG}
               isTyping={isTyping}
@@ -681,15 +719,17 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
                   </div>
                   <ChatInput
                     hero
-                    placeholder="Ask away..."
-                    onSendQuestion={handleSendQuestion}
-                    mode={mode}
-                    onChangeMode={setMode}
-                    radmapping={radmapping}
-                    RAG={RAG}
-                    isTyping={isTyping}
-                    onCancel={handleCancel}
-                    onToggleWorkflow={(name, value) => {
+                  placeholder="Ask away..."
+                  onSendQuestion={handleSendQuestion}
+                  mode={mode}
+                  onChangeMode={setMode}
+                  renderer={renderer}
+                  onChangeRenderer={setRenderer}
+                  radmapping={radmapping}
+                  RAG={RAG}
+                  isTyping={isTyping}
+                  onCancel={handleCancel}
+                  onToggleWorkflow={(name, value) => {
                       if (name === "radmapping") {
                         setRadmapping(value)
                         if (value) { setDataRetrieval(false) }

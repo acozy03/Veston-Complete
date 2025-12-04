@@ -22,6 +22,8 @@ interface ChatInputProps {
   onChangeMode: (mode: "fast" | "slow") => void
   radmapping: boolean
   RAG: boolean
+  renderer: "markdown" | "c1"
+  onChangeRenderer: (renderer: "markdown" | "c1") => void
   isTyping: boolean
   onCancel: () => void
   onToggleWorkflow: (
@@ -38,6 +40,8 @@ export function ChatInput({
   onChangeMode,
   radmapping,
   RAG,
+  renderer,
+  onChangeRenderer,
   isTyping,
   onCancel,
   onToggleWorkflow,
@@ -142,6 +146,34 @@ export function ChatInput({
                   Data Analysis
                 </DropdownMenuItem>
               </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Visualization</DropdownMenuLabel>
+              <div className="p-1">
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    onChangeRenderer("markdown")
+                  }}
+                  className={cn(
+                    "cursor-pointer",
+                    renderer === "markdown" && "bg-accent text-accent-foreground",
+                  )}
+                >
+                  Standard (Markdown)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    onChangeRenderer("c1")
+                  }}
+                  className={cn(
+                    "cursor-pointer",
+                    renderer === "c1" && "bg-accent text-accent-foreground",
+                  )}
+                >
+                  C1 Visualization
+                </DropdownMenuItem>
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
           <Textarea
@@ -191,6 +223,8 @@ export function ChatInput({
               : radmapping
                 ? "RadMapping+"
                 : "Workflow: None"}
+            {" • "}
+            {renderer === "c1" ? "C1 Visualization" : "Markdown"}
           </p>
         )}
       </div>

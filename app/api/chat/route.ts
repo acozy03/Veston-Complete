@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServerSupabase } from "@/lib/supabase/server"
+import OpenAI from "openai"
 
 // Single n8n classifier webhook endpoint
 const N8N_CLASSIFIER_URL = process.env.N8N_CLASSIFIER_URL
@@ -12,6 +13,7 @@ export async function POST(req: Request) {
       fast,
       slow,
       mode,
+      renderer,
       radmapping,
       RAG,
       noWorkflow,
@@ -21,6 +23,7 @@ export async function POST(req: Request) {
       fast?: boolean
       slow?: boolean
       mode?: "fast" | "slow" | string
+      renderer?: "markdown" | "c1"
       radmapping?: boolean
       RAG?: boolean
       noWorkflow?: boolean
@@ -37,6 +40,7 @@ export async function POST(req: Request) {
         radmapping: radmapping === true,
         RAG: RAG === true,
         noWorkflow: noWorkflow === true,
+        renderer: renderer === 'c1' ? 'c1' : 'markdown',
         questionPreview: preview,
       })
     } catch {}
@@ -52,6 +56,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const user = userRes.user
+    const targetRenderer: "markdown" | "c1" = renderer === 'c1' ? 'c1' : 'markdown'
 
     // Create or retrieve chat row (scoped by user)
     let effectiveChatId = chatId
@@ -217,7 +222,11 @@ try {
   }
 } catch {}
 
-// If sources are present, strip their URLs from the reply so links only appear in the Sources box
+const normalizedReply = typeof reply === 'string' ? reply : String(reply ?? '')
+const normalizedSources = Array.isArray(sources) && sources.length > 0 ? sources : undefined
+let renderedReply = normalizedReply
+
+// If sources are present and we're staying in markdown mode, strip their URLs from the reply so links only appear in the Sources box
 const stripUrlFromText = (text: string, url: string) => {
   if (!text || !url) return text
   let out = text
@@ -241,15 +250,51 @@ const stripUrlFromText = (text: string, url: string) => {
   return out
 }
 
-if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
-  for (const s of sources) {
-    if (s?.url) reply = stripUrlFromText(reply, s.url)
+if (targetRenderer !== 'c1' && normalizedSources && normalizedSources.length > 0) {
+  for (const s of normalizedSources) {
+    if (s?.url) renderedReply = stripUrlFromText(renderedReply, s.url)
   }
 }
+
+if (targetRenderer === 'c1') {
+  try {
+    if (!process.env.THESYS_API_KEY) {
+      console.error('Missing THESYS_API_KEY for C1 renderer')
+    } else {
+      const client = new OpenAI({
+        apiKey: process.env.THESYS_API_KEY,
+        baseURL: 'https://api.thesys.dev/v1/embed',
+      })
+      const model = process.env.THESYS_MODEL || 'c1-exp/openai/gpt-5/v-20250815'
+      const completion = await client.chat.completions.create({
+        model,
+        temperature: 0,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Transform the provided assistant markdown reply and optional sources into a single C1 response string. Use <content> for the main answer and preserve hyperlinks. Use <artifact> for any structured or tabular details. Do not invent new facts.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({ reply: normalizedReply, sources: normalizedSources ?? [] }),
+          },
+        ],
+      })
+      const candidate = completion.choices?.[0]?.message?.content
+      if (typeof candidate === 'string' && candidate.trim()) {
+        renderedReply = candidate
+      }
+    }
+  } catch (err) {
+    console.error('Failed to render C1 payload', err)
+  }
+}
+
     // Save assistant reply to messages (capture id for source linking)
     const { data: assistantInsert, error: assistantErr } = await supabase
       .from('messages')
-      .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: reply })
+      .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: renderedReply })
       .select('id')
       .single()
 
@@ -258,9 +303,9 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
     }
 
     // Opportunistically persist sources if available (ignore if table doesn't exist)
-    if (assistantInsert?.id && Array.isArray(sources) && sources.length > 0) {
+    if (assistantInsert?.id && normalizedSources && normalizedSources.length > 0) {
       try {
-        const rows = sources.map((s) => ({
+        const rows = normalizedSources.map((s) => ({
           message_id: assistantInsert.id as string,
           chat_id: effectiveChatId,
           user_email: user.email,
@@ -295,10 +340,11 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
     })
 
     return NextResponse.json({
-      reply,
+      reply: renderedReply,
       raw: workflowJson ?? workflowText,
       chatId: effectiveChatId,
-      sources,
+      sources: normalizedSources,
+      renderer: targetRenderer,
     })
     
   } catch (error) {
