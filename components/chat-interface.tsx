@@ -285,7 +285,20 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         if (msgs.length === 0 && (c.messages?.length || 0) > 0) {
           return c
         }
-        return { ...c, messages: msgs }
+        const merged = msgs.map((msg) => {
+          if (msg.role !== "assistant" || (msg.visuals && msg.visuals.length > 0)) return msg
+          const existing = (c.messages || []).find(
+            (m) =>
+              m.role === msg.role &&
+              (m.content || "").trim() === (msg.content || "").trim() &&
+              (m.visuals?.length || 0) > 0,
+          )
+          if (existing?.visuals?.length) {
+            return { ...msg, visuals: existing.visuals }
+          }
+          return msg
+        })
+        return { ...c, messages: merged }
       }),
     )
     // Update preview to latest

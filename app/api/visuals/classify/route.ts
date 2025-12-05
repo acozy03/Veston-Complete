@@ -26,11 +26,11 @@ export async function POST(req: Request) {
         {
           role: "system",
           content:
-            "Return a single word `yes`  indicating whether the user wants a data visualization (chart/graph) in the response.",
+            "Return a single word `yes` indicating whether the user wants a data visualization (chart/graph) in the response.",
         },
         {
           role: "user",
-          content: `Question: ${question}\nAnswer only yes or no.`,
+          content: `Question: ${question}\nAnswer only yes.`,
         },
       ],
     })
