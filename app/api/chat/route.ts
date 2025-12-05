@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServerSupabase } from "@/lib/supabase/server"
+import { prepareChartSpecs } from "@/lib/visualization"
 
 // Single n8n classifier webhook endpoint
 const N8N_CLASSIFIER_URL = process.env.N8N_CLASSIFIER_URL
@@ -169,6 +170,101 @@ if (obj && typeof (obj as any).output === 'string') {
   }
 }
 
+export async function GET(req: Request) {
+  try {
+    const url = new URL(req.url)
+    const chatId = url.searchParams.get('chatId')
+
+    if (!chatId) {
+      return NextResponse.json({ error: "chatId is required" }, { status: 400 })
+    }
+
+    const supabase = await createServerSupabase()
+    const { data: userRes, error: userErr } = await supabase.auth.getUser()
+    if (userErr || !userRes?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    const user = userRes.user
+
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id, role, content, created_at')
+      .eq('chat_id', chatId)
+      .eq('user_email', user.email)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      return NextResponse.json({ error: "Failed to load messages" }, { status: 500 })
+    }
+
+    let sourcesByMessage: Record<string, any[]> = {}
+    try {
+      const ids = (data || []).map((m) => m.id as string)
+      if (ids.length > 0) {
+        const { data: srcRows } = await supabase
+          .from('message_sources')
+          .select('message_id, url, title, snippet, score')
+          .in('message_id', ids)
+          .eq('chat_id', chatId)
+          .eq('user_email', user.email)
+        if (Array.isArray(srcRows)) {
+          for (const r of srcRows) {
+            const mid = String(r.message_id)
+            const item = {
+              url: String(r.url),
+              title: r.title ? String(r.title) : undefined,
+              snippet: r.snippet ? String(r.snippet) : undefined,
+              score: typeof r.score === 'number' ? r.score : (r.score == null ? undefined : Number(r.score as any)),
+            }
+            if (!sourcesByMessage[mid]) sourcesByMessage[mid] = []
+            sourcesByMessage[mid].push(item)
+          }
+        }
+      }
+    } catch {
+      // swallow; table may not exist yet or RLS not configured
+    }
+
+    let visualsByMessage: Record<string, any[]> = {}
+    try {
+      const ids = (data || []).map((m) => m.id as string)
+      if (ids.length > 0) {
+        const { data: visRows } = await supabase
+          .from('message_visualizations')
+          .select('message_id, visualizations')
+          .in('message_id', ids)
+          .eq('chat_id', chatId)
+          .eq('user_email', user.email)
+        if (Array.isArray(visRows)) {
+          for (const r of visRows) {
+            const mid = String(r.message_id)
+            const charts = prepareChartSpecs((r as any).visualizations)
+            if (charts.length > 0) {
+              visualsByMessage[mid] = charts
+            }
+          }
+        }
+      }
+    } catch {
+      // swallow; table may not exist yet or RLS not configured
+    }
+
+    const messages = (data || []).map((m) => ({
+      id: m.id as string,
+      role: (m.role as string) === 'assistant' ? 'assistant' : 'user',
+      content: m.content as string,
+      timestamp: new Date(m.created_at as string),
+      sources: sourcesByMessage[String(m.id)] || undefined,
+      visuals: visualsByMessage[String(m.id)] || undefined,
+    }))
+
+    return NextResponse.json({ messages })
+  } catch (error) {
+    console.error("Failed to fetch chat messages", error)
+    return NextResponse.json({ error: "Failed to fetch chat messages" }, { status: 500 })
+  }
+}
+
 if (obj && typeof (obj as any).output === 'object' && (obj as any).output !== null) {
   obj = (obj as any).output as JsonRecord;
 }
@@ -216,7 +312,8 @@ if (Array.isArray(workflowJson)) {
       ? (obj as any).charts
       : undefined
   if (rawVisualizations) {
-    visualizations = rawVisualizations
+    const prepared = prepareChartSpecs(rawVisualizations)
+    visualizations = prepared.length ? prepared : rawVisualizations
   }
 }
 
@@ -285,6 +382,20 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
         await supabase.from('message_sources').insert(rows)
       } catch (e) {
         console.warn('Skipping source persistence (table missing or RLS blocked):', e)
+      }
+    }
+
+    // Persist visualizations if available
+    if (assistantInsert?.id && Array.isArray(visualizations) && visualizations.length > 0) {
+      try {
+        await supabase.from('message_visualizations').insert({
+          message_id: assistantInsert.id as string,
+          chat_id: effectiveChatId,
+          user_email: user.email,
+          visualizations,
+        })
+      } catch (e) {
+        console.warn('Skipping visualization persistence (table missing or RLS blocked):', e)
       }
     }
 

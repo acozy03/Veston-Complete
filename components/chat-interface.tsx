@@ -268,12 +268,37 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       // swallow; table may not exist yet or RLS not configured
     }
 
+    let visualsByMessage: Record<string, ChartSpec[]> = {}
+    try {
+      const ids = (data || []).map((m) => m.id as string)
+      if (ids.length > 0) {
+        const { data: visRows } = await supabase
+          .from("message_visualizations")
+          .select("message_id, visualizations")
+          .in("message_id", ids)
+          .eq("chat_id", chatId)
+          .eq("user_email", userEmail || "")
+        if (Array.isArray(visRows)) {
+          for (const r of visRows) {
+            const mid = String((r as any).message_id)
+            const charts = prepareChartSpecs((r as any).visualizations)
+            if (charts.length > 0) {
+              visualsByMessage[mid] = charts
+            }
+          }
+        }
+      }
+    } catch {
+      // swallow; table may not exist yet or RLS not configured
+    }
+
     const msgs: Message[] = (data || []).map((m) => ({
       id: m.id as string,
       role: (m.role as "user" | "assistant" | "system" | "tool") === "assistant" ? "assistant" : "user",
       content: m.content as string,
       timestamp: new Date(m.created_at as string),
       sources: sourcesByMessage[String(m.id)] || undefined,
+      visuals: visualsByMessage[String(m.id)] || undefined,
     }))
     if (msgs.length > 0) {
       newlyCreatedChatIds.current.delete(chatId)
@@ -285,20 +310,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         if (msgs.length === 0 && (c.messages?.length || 0) > 0) {
           return c
         }
-        const merged = msgs.map((msg) => {
-          if (msg.role !== "assistant" || (msg.visuals && msg.visuals.length > 0)) return msg
-          const existing = (c.messages || []).find(
-            (m) =>
-              m.role === msg.role &&
-              (m.content || "").trim() === (msg.content || "").trim() &&
-              (m.visuals?.length || 0) > 0,
-          )
-          if (existing?.visuals?.length) {
-            return { ...msg, visuals: existing.visuals }
-          }
-          return msg
-        })
-        return { ...c, messages: merged }
+        return { ...c, messages: msgs }
       }),
     )
     // Update preview to latest
