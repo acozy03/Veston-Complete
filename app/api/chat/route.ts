@@ -152,21 +152,195 @@ export async function POST(req: Request) {
         { status: 502 },
       )
     }
-type JsonRecord = Record<string, unknown>;
-let obj = (typeof workflowJson === "object" && workflowJson !== null
-  ? (workflowJson as JsonRecord)
-  : null);
+    type JsonRecord = Record<string, unknown>;
+    let obj = (typeof workflowJson === "object" && workflowJson !== null
+      ? (workflowJson as JsonRecord)
+      : null);
 
-// n8n sometimes wraps the real JSON inside an `output` key
-// Handle both stringified and object forms
-if (obj && typeof (obj as any).output === 'string') {
-  try {
-    const inner = JSON.parse((obj as any).output);
-    if (typeof inner === 'object' && inner !== null) {
-      obj = inner as JsonRecord;
+    // n8n sometimes wraps the real JSON inside an `output` key
+    // Handle both stringified and object forms
+    if (obj && typeof (obj as any).output === 'string') {
+      try {
+        const inner = JSON.parse((obj as any).output);
+        if (typeof inner === 'object' && inner !== null) {
+          obj = inner as JsonRecord;
+        }
+      } catch {
+        // keep original obj if parse fails
+      }
     }
-  } catch {
-    // keep original obj if parse fails
+
+    if (obj && typeof (obj as any).output === 'object' && (obj as any).output !== null) {
+      obj = (obj as any).output as JsonRecord;
+    }
+
+    // Also unwrap common containers like `{ data: {...} }`
+    if (obj && typeof (obj as any).data === 'object' && (obj as any).data !== null) {
+      obj = (obj as any).data as JsonRecord;
+    }
+
+    try {
+      console.log('[chat] unwrapped object keys:', obj ? Object.keys(obj) : null)
+    } catch {}
+
+    // Handle Google Bucket Scraper array payloads that contain a markdown `message` field
+    let reply: string;
+    let sources: Array<{ url: string; title?: string; snippet?: string; score?: number }> | undefined;
+    let visualizations: unknown;
+    if (Array.isArray(workflowJson)) {
+      const first = workflowJson[0] as JsonRecord | undefined;
+      const arrMessage = typeof first?.message === "string" ? (first!.message as string) : null;
+      reply = arrMessage || workflowText;
+    } else {
+      reply =
+        (obj?.reply && typeof obj.reply === "string" && obj.reply) ||
+        (obj?.message && typeof obj.message === "string" && obj.message) ||
+        (obj?.response && typeof obj.response === "string" && obj.response) ||
+        (typeof workflowText === "string" ? workflowText : JSON.stringify(workflowJson));
+
+      // Optional structured sources passthrough
+      const rawSources = Array.isArray((obj as any)?.sources) ? (obj as any).sources : undefined
+      if (rawSources) {
+        sources = rawSources
+          .map((s: any) => ({
+            url: typeof s?.url === 'string' ? s.url : (typeof s?.link === 'string' ? s.link : undefined),
+            title: typeof s?.title === 'string' ? s.title : undefined,
+            snippet: typeof s?.snippet === 'string' ? s.snippet : undefined,
+            score: typeof s?.score === 'number' ? s.score : (typeof s?.score === 'string' ? Number(s.score) : undefined),
+          }))
+          .filter((s: any) => typeof s.url === 'string' && !!s.url)
+      }
+
+      const rawVisualizations = Array.isArray((obj as any)?.visualizations)
+        ? (obj as any).visualizations
+        : Array.isArray((obj as any)?.charts)
+          ? (obj as any).charts
+          : undefined
+      if (rawVisualizations) {
+        const prepared = prepareChartSpecs(rawVisualizations)
+        visualizations = prepared.length ? prepared : rawVisualizations
+      }
+    }
+
+    try {
+      console.log('[chat] parsed reply length:', typeof reply === 'string' ? reply.length : -1, 'sources count:', Array.isArray(sources) ? sources.length : 0)
+      if (Array.isArray(sources) && sources[0]) {
+        console.log('[chat] first source sample:', sources[0])
+      }
+      if (Array.isArray(visualizations)) {
+        console.log('[chat] visualizations passed through:', visualizations.length)
+      }
+    } catch {}
+
+    // If sources are present, strip their URLs from the reply so links only appear in the Sources box
+    const stripUrlFromText = (text: string, url: string) => {
+      if (!text || !url) return text
+      let out = text
+      const variants = [
+        url,
+        `[${url}]`,
+        `(${url})`,
+        `<${url}>`,
+      ]
+      for (const v of variants) {
+        out = out.split(v).join("")
+      }
+      // Clean up leftover extra spaces but PRESERVE newlines
+      out = out
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/\[\s*\]/g, '')
+        .replace(/\(\s*\)/g, '')
+        .replace(/[ \t]+\n/g, '\n') // trim spaces before newline
+        .replace(/\n{3,}/g, '\n\n') // collapse 3+ newlines to 2
+        .trim()
+      return out
+    }
+
+    if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
+      for (const s of sources) {
+        if (s?.url) reply = stripUrlFromText(reply, s.url)
+      }
+    }
+    // Save assistant reply to messages (capture id for source linking)
+    const { data: assistantInsert, error: assistantErr } = await supabase
+      .from('messages')
+      .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: reply })
+      .select('id')
+      .single()
+
+    if (assistantErr) {
+      console.error('Failed to insert assistant message', assistantErr)
+    }
+
+    // Opportunistically persist sources if available (ignore if table doesn't exist)
+    if (assistantInsert?.id && Array.isArray(sources) && sources.length > 0) {
+      try {
+        const rows = sources.map((s) => ({
+          message_id: assistantInsert.id as string,
+          chat_id: effectiveChatId,
+          user_email: user.email,
+          url: s.url,
+          title: s.title ?? null,
+          snippet: s.snippet ?? null,
+          score: typeof s.score === 'number' ? s.score : null,
+        }))
+        await supabase.from('message_sources').insert(rows)
+      } catch (e) {
+        console.warn('Skipping source persistence (table missing or RLS blocked):', e)
+      }
+    }
+
+    // Persist visualizations if available
+    if (assistantInsert?.id && Array.isArray(visualizations) && visualizations.length > 0) {
+      const visualizationPayload = {
+        message_id: assistantInsert.id as string,
+        chat_id: effectiveChatId,
+        user_email: user.email,
+        visualizations,
+      }
+      try {
+        console.log('[chat] inserting visualizations payload:', visualizationPayload)
+        const { error: visInsertError } = await supabase.from('message_visualizations').insert(visualizationPayload)
+        if (visInsertError) {
+          console.warn('Visualization insert returned error:', visInsertError)
+        } else {
+          console.log('[chat] visualization insert succeeded for message:', assistantInsert.id)
+        }
+      } catch (e) {
+        console.warn('Skipping visualization persistence (table missing or RLS blocked):', e)
+      }
+    }
+
+    // Log workflow run
+    await supabase.from('workflow_runs').insert({
+      user_id: user.id,
+      user_email: user.email,
+      chat_id: effectiveChatId,
+      message_id: userMessageId,
+      classifier_path: 'N8N_CLASSIFIER',
+      payload: {
+        question: effectiveQuestion,
+        mode,
+        fast: fast === true,
+        slow: slow === true,
+        radmapping: radmapping === true,
+        RAG: RAG === true,
+        noWorkflow: noWorkflow === true,
+      },
+      status: 'succeeded',
+    })
+
+    return NextResponse.json({
+      reply,
+      raw: workflowJson ?? workflowText,
+      chatId: effectiveChatId,
+      sources,
+      visualizations,
+    })
+    
+  } catch (error) {
+    console.error("Chat API error", error)
+    return NextResponse.json({ error: "Failed to process question" }, { status: 500 })
   }
 }
 
@@ -262,172 +436,5 @@ export async function GET(req: Request) {
   } catch (error) {
     console.error("Failed to fetch chat messages", error)
     return NextResponse.json({ error: "Failed to fetch chat messages" }, { status: 500 })
-  }
-}
-
-if (obj && typeof (obj as any).output === 'object' && (obj as any).output !== null) {
-  obj = (obj as any).output as JsonRecord;
-}
-
-// Also unwrap common containers like `{ data: {...} }`
-if (obj && typeof (obj as any).data === 'object' && (obj as any).data !== null) {
-  obj = (obj as any).data as JsonRecord;
-}
-
-try {
-  console.log('[chat] unwrapped object keys:', obj ? Object.keys(obj) : null)
-} catch {}
-
-// Handle Google Bucket Scraper array payloads that contain a markdown `message` field
-let reply: string;
-let sources: Array<{ url: string; title?: string; snippet?: string; score?: number }> | undefined;
-let visualizations: unknown;
-if (Array.isArray(workflowJson)) {
-  const first = workflowJson[0] as JsonRecord | undefined;
-  const arrMessage = typeof first?.message === "string" ? (first!.message as string) : null;
-  reply = arrMessage || workflowText;
-} else {
-  reply =
-    (obj?.reply && typeof obj.reply === "string" && obj.reply) ||
-    (obj?.message && typeof obj.message === "string" && obj.message) ||
-    (obj?.response && typeof obj.response === "string" && obj.response) ||
-    (typeof workflowText === "string" ? workflowText : JSON.stringify(workflowJson));
-
-  // Optional structured sources passthrough
-  const rawSources = Array.isArray((obj as any)?.sources) ? (obj as any).sources : undefined
-  if (rawSources) {
-    sources = rawSources
-      .map((s: any) => ({
-        url: typeof s?.url === 'string' ? s.url : (typeof s?.link === 'string' ? s.link : undefined),
-        title: typeof s?.title === 'string' ? s.title : undefined,
-        snippet: typeof s?.snippet === 'string' ? s.snippet : undefined,
-        score: typeof s?.score === 'number' ? s.score : (typeof s?.score === 'string' ? Number(s.score) : undefined),
-      }))
-      .filter((s: any) => typeof s.url === 'string' && !!s.url)
-  }
-
-  const rawVisualizations = Array.isArray((obj as any)?.visualizations)
-    ? (obj as any).visualizations
-    : Array.isArray((obj as any)?.charts)
-      ? (obj as any).charts
-      : undefined
-  if (rawVisualizations) {
-    const prepared = prepareChartSpecs(rawVisualizations)
-    visualizations = prepared.length ? prepared : rawVisualizations
-  }
-}
-
-try {
-  console.log('[chat] parsed reply length:', typeof reply === 'string' ? reply.length : -1, 'sources count:', Array.isArray(sources) ? sources.length : 0)
-  if (Array.isArray(sources) && sources[0]) {
-    console.log('[chat] first source sample:', sources[0])
-  }
-  if (Array.isArray(visualizations)) {
-    console.log('[chat] visualizations passed through:', visualizations.length)
-  }
-} catch {}
-
-// If sources are present, strip their URLs from the reply so links only appear in the Sources box
-const stripUrlFromText = (text: string, url: string) => {
-  if (!text || !url) return text
-  let out = text
-  const variants = [
-    url,
-    `[${url}]`,
-    `(${url})`,
-    `<${url}>`,
-  ]
-  for (const v of variants) {
-    out = out.split(v).join("")
-  }
-  // Clean up leftover extra spaces but PRESERVE newlines
-  out = out
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\[\s*\]/g, '')
-    .replace(/\(\s*\)/g, '')
-    .replace(/[ \t]+\n/g, '\n') // trim spaces before newline
-    .replace(/\n{3,}/g, '\n\n') // collapse 3+ newlines to 2
-    .trim()
-  return out
-}
-
-if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
-  for (const s of sources) {
-    if (s?.url) reply = stripUrlFromText(reply, s.url)
-  }
-}
-    // Save assistant reply to messages (capture id for source linking)
-    const { data: assistantInsert, error: assistantErr } = await supabase
-      .from('messages')
-      .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: reply })
-      .select('id')
-      .single()
-
-    if (assistantErr) {
-      console.error('Failed to insert assistant message', assistantErr)
-    }
-
-    // Opportunistically persist sources if available (ignore if table doesn't exist)
-    if (assistantInsert?.id && Array.isArray(sources) && sources.length > 0) {
-      try {
-        const rows = sources.map((s) => ({
-          message_id: assistantInsert.id as string,
-          chat_id: effectiveChatId,
-          user_email: user.email,
-          url: s.url,
-          title: s.title ?? null,
-          snippet: s.snippet ?? null,
-          score: typeof s.score === 'number' ? s.score : null,
-        }))
-        await supabase.from('message_sources').insert(rows)
-      } catch (e) {
-        console.warn('Skipping source persistence (table missing or RLS blocked):', e)
-      }
-    }
-
-    // Persist visualizations if available
-    if (assistantInsert?.id && Array.isArray(visualizations) && visualizations.length > 0) {
-      try {
-        await supabase.from('message_visualizations').insert({
-          message_id: assistantInsert.id as string,
-          chat_id: effectiveChatId,
-          user_email: user.email,
-          visualizations,
-        })
-      } catch (e) {
-        console.warn('Skipping visualization persistence (table missing or RLS blocked):', e)
-      }
-    }
-
-    // Log workflow run
-    await supabase.from('workflow_runs').insert({
-      user_id: user.id,
-      user_email: user.email,
-      chat_id: effectiveChatId,
-      message_id: userMessageId,
-      classifier_path: 'N8N_CLASSIFIER',
-      payload: {
-        question: effectiveQuestion,
-        mode,
-        fast: fast === true,
-        slow: slow === true,
-        radmapping: radmapping === true,
-        RAG: RAG === true,
-        noWorkflow: noWorkflow === true,
-      },
-      status: 'succeeded',
-    })
-
-    return NextResponse.json({
-      reply,
-      raw: workflowJson ?? workflowText,
-      chatId: effectiveChatId,
-      sources,
-      visualizations,
-    })
-    
-  } catch (error) {
-    console.error("Chat API error", error)
-    return NextResponse.json({ error: "Failed to process question" }, { status: 500 })
   }
 }
