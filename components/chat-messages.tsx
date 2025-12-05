@@ -8,6 +8,7 @@ import type { Message } from "./chat-interface"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Copy, Check } from "lucide-react"
+import { ChartVisualizations } from "./chart-visualizations"
 
 interface ChatMessagesProps {
   messages: Message[]
@@ -118,6 +119,12 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
                             )
                           })}
                         </ul>
+                      </div>
+                    )}
+
+                    {message.visuals && message.visuals.length > 0 && (
+                      <div className="mt-4">
+                        <ChartVisualizations charts={message.visuals} />
                       </div>
                     )}
 

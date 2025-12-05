@@ -10,6 +10,8 @@ import { Button } from "./ui/button"
 import { Menu } from "lucide-react"
 import { ThemeToggle } from "./theme-toggle"
 import { createClient } from "@/lib/supabase/client"
+import type { ChartSpec } from "@/lib/visualization"
+import { prepareChartSpecs, stringifyForPrompt } from "@/lib/visualization"
 
 export type Source = {
   url: string
@@ -24,6 +26,7 @@ export type Message = {
   content: string
   timestamp: Date
   sources?: Source[]
+  visuals?: ChartSpec[]
 }
 
 export type Chat = {
@@ -40,6 +43,56 @@ const generateId = () =>
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`
 
 const INITIAL_CHATS: Chat[] = []
+
+const classifyVisualizationNeed = async (question: string) => {
+  try {
+    console.log("[visuals] classify:start", question)
+    const res = await fetch("/api/visuals/classify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    })
+    const parsed = await res.json().catch(() => null)
+    const shouldVisualize = Boolean((parsed as any)?.shouldVisualize)
+    console.log("[visuals] classify:result", shouldVisualize, parsed)
+    return shouldVisualize
+  } catch (error) {
+    console.warn("[visuals] classify:failed", error)
+    return false
+  }
+}
+
+const extractChartsFromPayload = (payload: unknown): ChartSpec[] => {
+  if (payload && typeof payload === "object") {
+    const obj = payload as any
+    if (Array.isArray(obj.visualizations)) return prepareChartSpecs(obj.visualizations)
+    if (Array.isArray(obj.charts)) return prepareChartSpecs(obj.charts)
+  }
+  return []
+}
+
+const generateVisualizations = async (params: { question: string; answer: string; raw?: unknown }) => {
+  try {
+    console.log("[visuals] generate:start", { question: params.question })
+    const res = await fetch("/api/visuals/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: params.question,
+        answer: params.answer,
+        raw: params.raw,
+        preview: stringifyForPrompt(params.raw, 2000),
+      }),
+    })
+    const parsed = await res.json().catch(() => null)
+    const charts = prepareChartSpecs((parsed as any)?.charts || (parsed as any)?.visualizations)
+    console.log("[visuals] generate:result", charts.length)
+    return charts
+  } catch (error) {
+    console.warn("[visuals] generate:failed", error)
+    return []
+  }
+}
 
 type ChatInterfaceProps = {
   initialChats?: Chat[]
@@ -402,28 +455,28 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     } else {
       const updatedMessages = [...(activeChat?.messages ?? []), userMessage]
 
-    setChats((prevChats) =>
-      prevChats.map((chat) => {
-        if (chat.id === (activeChat?.id ?? currentChatId)) {
-          const isFirst = chat.messages.length === 0
-          const nextTitle = isFirst ? question.slice(0, 30) + (question.length > 30 ? "..." : "") : chat.title
-          // Persist title on first message
-          if (isFirst) {
-            void supabase
-              .from("chats")
-              .update({ title: nextTitle })
-              .eq("id", chat.id)
-              .eq("user_email", userEmail || "")
+      setChats((prevChats) =>
+        prevChats.map((chat) => {
+          if (chat.id === (activeChat?.id ?? currentChatId)) {
+            const isFirst = chat.messages.length === 0
+            const nextTitle = isFirst ? question.slice(0, 30) + (question.length > 30 ? "..." : "") : chat.title
+            // Persist title on first message
+            if (isFirst) {
+              void supabase
+                .from("chats")
+                .update({ title: nextTitle })
+                .eq("id", chat.id)
+                .eq("user_email", userEmail || "")
+            }
+            return {
+              ...chat,
+              messages: updatedMessages,
+              title: nextTitle,
+            }
           }
-          return {
-            ...chat,
-            messages: updatedMessages,
-            title: nextTitle,
-          }
-        }
-        return chat
-      }),
-    )
+          return chat
+        }),
+      )
     }
 
     const pendingChatId = activeChat?.id || currentChatId || null
@@ -433,6 +486,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     try {
       const controller = new AbortController()
       setAbortController(controller)
+      const visualizationPromise = classifyVisualizationNeed(question)
       const payload = {
         question,
         chatId: requestChatId,
@@ -481,6 +535,15 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           ? (parsed as { reply: string }).reply
           : responseText
 
+      const serverCharts = extractChartsFromPayload(parsed)
+      const rawPayload = typeof parsed === "object" && parsed !== null ? (parsed as any).raw : undefined
+      let charts = serverCharts
+
+      const shouldVisualize = await visualizationPromise.catch(() => false)
+      if (shouldVisualize && charts.length === 0) {
+        charts = await generateVisualizations({ question, answer: replyText, raw: rawPayload })
+      }
+
       // Extract optional sources array from the response
       const sources: Source[] | undefined =
         typeof parsed === "object" && parsed !== null && Array.isArray((parsed as any).sources)
@@ -500,6 +563,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         content: replyText,
         timestamp: new Date(),
         sources,
+        visuals: charts.length > 0 ? charts : undefined,
       }
 
       setChats((prevChats) =>

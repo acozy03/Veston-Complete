@@ -185,6 +185,7 @@ try {
 // Handle Google Bucket Scraper array payloads that contain a markdown `message` field
 let reply: string;
 let sources: Array<{ url: string; title?: string; snippet?: string; score?: number }> | undefined;
+let visualizations: unknown;
 if (Array.isArray(workflowJson)) {
   const first = workflowJson[0] as JsonRecord | undefined;
   const arrMessage = typeof first?.message === "string" ? (first!.message as string) : null;
@@ -208,12 +209,24 @@ if (Array.isArray(workflowJson)) {
       }))
       .filter((s: any) => typeof s.url === 'string' && !!s.url)
   }
+
+  const rawVisualizations = Array.isArray((obj as any)?.visualizations)
+    ? (obj as any).visualizations
+    : Array.isArray((obj as any)?.charts)
+      ? (obj as any).charts
+      : undefined
+  if (rawVisualizations) {
+    visualizations = rawVisualizations
+  }
 }
 
 try {
   console.log('[chat] parsed reply length:', typeof reply === 'string' ? reply.length : -1, 'sources count:', Array.isArray(sources) ? sources.length : 0)
   if (Array.isArray(sources) && sources[0]) {
     console.log('[chat] first source sample:', sources[0])
+  }
+  if (Array.isArray(visualizations)) {
+    console.log('[chat] visualizations passed through:', visualizations.length)
   }
 } catch {}
 
@@ -299,6 +312,7 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
       raw: workflowJson ?? workflowText,
       chatId: effectiveChatId,
       sources,
+      visualizations,
     })
     
   } catch (error) {
