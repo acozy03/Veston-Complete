@@ -261,9 +261,6 @@ export function ChartVisualizations({ charts, className, contextId }: ChartVisua
                     </>
                   )}
                 </button>
-                <div className="rounded-md bg-background px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {chart.type} chart
-                </div>
               </div>
             </div>
             <div className="h-72 w-full">
