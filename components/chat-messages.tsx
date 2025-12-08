@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Children, isValidElement, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import { ScrollArea } from "./ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -69,9 +69,22 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
                             }
                             return <a href={url} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
                           },
-                          p: ({ node, ...props }) => (
-                            <p className="whitespace-pre-wrap" {...props} />
-                          ),
+                          p: ({ node, children, ...props }) => {
+                            const containsPre = Children.toArray(children).some(
+                              (child) => isValidElement(child) && typeof child.type === 'string' && child.type === 'pre',
+                            )
+
+                            const Component = containsPre ? 'div' : 'p'
+
+                            return (
+                              <Component
+                                className={cn(containsPre ? undefined : 'whitespace-pre-wrap')}
+                                {...props}
+                              >
+                                {children}
+                              </Component>
+                            )
+                          },
                           code: ({ inline, className, children, ...props }) => {
                             if (!inline) {
                               return (
@@ -161,31 +174,44 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
                       <div className="w-full rounded-2xl bg-secondary px-4 py-2 text-secondary-foreground">
                         <div className="text-base leading-relaxed break-words [&_a]:underline [&_a]:text-foreground">
                         <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            a: ({ node, href, children, ...props }) => {
-                              const url = typeof href === 'string' ? href : ''
-                              const isXlsx = /\.xlsx(\?|$)/i.test(url) || /filename=.*\.xlsx/i.test(url) || /application%2Fvnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/i.test(url)
-                              if (isXlsx && url) {
-                                const previewUrl = `/preview/xlsx?src=${encodeURIComponent(url)}`
-                                const downloadUrl = `/api/proxy-file?src=${encodeURIComponent(url)}&download=1`
-                                return (
-                                  <span>
-                                    <a href={previewUrl} target="_blank" rel="noopener noreferrer" {...props}>Open preview</a>
-                                    <span className="mx-2 opacity-50">·</span>
-                                    <a href={downloadUrl} rel="noopener noreferrer">Download</a>
-                                  </span>
-                                )
-                              }
-                              return <a href={url} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
-                            },
-                            p: ({ node, ...props }) => (
-                              <p className="whitespace-pre-wrap" {...props} />
-                            ),
-                          }}
-                        >
-                          {message.content}
-                        </ReactMarkdown>
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({ node, href, children, ...props }) => {
+                            const url = typeof href === 'string' ? href : ''
+                            const isXlsx = /\.xlsx(\?|$)/i.test(url) || /filename=.*\.xlsx/i.test(url) || /application%2Fvnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/i.test(url)
+                            if (isXlsx && url) {
+                              const previewUrl = `/preview/xlsx?src=${encodeURIComponent(url)}`
+                              const downloadUrl = `/api/proxy-file?src=${encodeURIComponent(url)}&download=1`
+                              return (
+                                <span>
+                                  <a href={previewUrl} target="_blank" rel="noopener noreferrer" {...props}>Open preview</a>
+                                  <span className="mx-2 opacity-50">·</span>
+                                  <a href={downloadUrl} rel="noopener noreferrer">Download</a>
+                                </span>
+                              )
+                            }
+                            return <a href={url} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
+                          },
+                          p: ({ node, children, ...props }) => {
+                            const containsPre = Children.toArray(children).some(
+                              (child) => isValidElement(child) && typeof child.type === 'string' && child.type === 'pre',
+                            )
+
+                            const Component = containsPre ? 'div' : 'p'
+
+                            return (
+                              <Component
+                                className={cn(containsPre ? undefined : 'whitespace-pre-wrap')}
+                                {...props}
+                              >
+                                {children}
+                              </Component>
+                            )
+                          },
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
                         </div>
                       </div>
 

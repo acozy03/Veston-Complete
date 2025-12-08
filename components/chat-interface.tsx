@@ -87,6 +87,7 @@ const generateVisualizations = async (params: { question: string; answer: string
     const parsed = await res.json().catch(() => null)
     const charts = prepareChartSpecs((parsed as any)?.charts || (parsed as any)?.visualizations)
     console.log("[visuals] generate:result", charts.length)
+    console.log("[visuals] generate:charts", charts)
     return charts
   } catch (error) {
     console.warn("[visuals] generate:failed", error)

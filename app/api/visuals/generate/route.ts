@@ -51,7 +51,7 @@ export async function POST(req: Request) {
 
     const charts = prepareChartSpecs((parsed as any)?.charts || (parsed as any)?.visualizations)
     console.log("[visuals:generate] charts prepared", charts.length)
-
+    console.log("[visuals:generate] raw model output", charts)
     return NextResponse.json({ charts })
   } catch (error) {
     console.error("[visuals:generate] failed", error)
