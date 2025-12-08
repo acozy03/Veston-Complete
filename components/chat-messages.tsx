@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import type { Message } from "./chat-interface"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { Copy, Check } from "lucide-react"
+import { Copy, Check, ImageDown } from "lucide-react"
 import { ChartVisualizations } from "./chart-visualizations"
 
 interface ChatMessagesProps {
@@ -19,10 +19,60 @@ interface ChatMessagesProps {
 export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" })
   }, [messages.length, isTyping])
+
+  const handleExportChart = async (messageId: string) => {
+    if (!messageId) return
+
+    const container = messageRefs.current[messageId]
+    if (!container) return
+
+    const svg = container.querySelector("svg") as SVGSVGElement | null
+    if (!svg) return
+
+    try {
+      const serializer = new XMLSerializer()
+      const svgString = serializer.serializeToString(svg)
+      const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" })
+      const svgUrl = URL.createObjectURL(svgBlob)
+
+      const img = new Image()
+      const bounds = svg.getBoundingClientRect()
+      const width = bounds.width || svg.clientWidth || Number(svg.getAttribute("width")) || 800
+      const height = bounds.height || svg.clientHeight || Number(svg.getAttribute("height")) || 400
+
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = (err) => reject(err)
+        img.src = svgUrl
+      })
+
+      const canvas = document.createElement("canvas")
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext("2d")
+      if (!ctx) throw new Error("Canvas not supported")
+
+      const background = getComputedStyle(document.documentElement).getPropertyValue("--background").trim()
+      ctx.fillStyle = background || "#ffffff"
+      ctx.fillRect(0, 0, width, height)
+      ctx.drawImage(img, 0, 0, width, height)
+
+      URL.revokeObjectURL(svgUrl)
+
+      const pngUrl = canvas.toDataURL("image/png")
+      const link = document.createElement("a")
+      link.href = pngUrl
+      link.download = `${messageId || "chart"}.png`
+      link.click()
+    } catch (error) {
+      console.error("Failed to export chart", error)
+    }
+  }
 
   const formatTimestamp = (d?: Date) => {
     if (!d || !(d instanceof Date) || Number.isNaN(d.getTime())) return ""
@@ -46,7 +96,15 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
               return !(m.role === prev.role && (m.content || "").trim() === (prev.content || "").trim())
             })
             .map((message) => (
-              <div key={message.id} className="w-full">
+              <div
+                key={message.id}
+                className="w-full"
+                ref={(el) => {
+                  if (message.id) {
+                    messageRefs.current[message.id] = el
+                  }
+                }}
+              >
                 {message.role === "assistant" ? (
                   <div className="w-full border-b border-border/60 bg-background/60 px-2 py-6 sm:px-0">
                     <div className={cn("markdown text-foreground/90")}> 
@@ -144,27 +202,38 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
                     {(message.timestamp || true) && (
                       <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground opacity-70">
                         <div>{message.timestamp ? formatTimestamp(message.timestamp) : ''}</div>
-                        <button
-                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-muted/60"
-                          title={copiedId === message.id ? "Copied" : "Copy"}
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard.writeText(message.content || "")
-                              setCopiedId(message.id)
-                              setTimeout(() => setCopiedId(null), 1500)
-                            } catch {}
-                          }}
-                        >
-                          {copiedId === message.id ? (
-                            <>
-                              <Check className="h-3.5 w-3.5" /> Copied
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="h-3.5 w-3.5" /> Copy
-                            </>
+                        <div className="flex items-center gap-2">
+                          {message.visuals && message.visuals.length > 0 && (
+                            <button
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-muted/60"
+                              title="Export chart as PNG"
+                              onClick={() => message.id && handleExportChart(message.id)}
+                            >
+                              <ImageDown className="h-3.5 w-3.5" /> Export chart
+                            </button>
                           )}
-                        </button>
+                          <button
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-muted/60"
+                            title={copiedId === message.id ? "Copied" : "Copy"}
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(message.content || "")
+                                setCopiedId(message.id)
+                                setTimeout(() => setCopiedId(null), 1500)
+                              } catch {}
+                            }}
+                          >
+                            {copiedId === message.id ? (
+                              <>
+                                <Check className="h-3.5 w-3.5" /> Copied
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3.5 w-3.5" /> Copy
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

@@ -38,6 +38,11 @@ type ChartRendererProps = {
   chart: ChartSpec
 }
 
+const truncateLabel = (label: string | number, maxLength = 12) => {
+  if (typeof label !== "string") return label
+  return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label
+}
+
 const ChartTooltipContent = ({ active, payload, label }: TooltipProps<number, string>) => {
   if (!active || !payload?.length) return null
 
@@ -149,9 +154,18 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       <div className="flex-1 overflow-x-auto">
         <div style={{ width: computedWidth, minWidth: "100%", height: "100%" }}>
           <ResponsiveContainer width="100%" height="100%">
-            <ChartComponent data={hydrated.data} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
+            <ChartComponent data={hydrated.data} margin={{ top: 10, right: 20, bottom: 32, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
-              <XAxis dataKey={xKey} tickLine={false} axisLine={false} tickMargin={8} interval={0} />
+              <XAxis
+                dataKey={xKey}
+                tickLine={false}
+                axisLine={false}
+                tickMargin={12}
+                interval={0}
+                angle={65}
+                textAnchor="start"
+                tickFormatter={(value) => truncateLabel(value)}
+              />
               <YAxis allowDecimals tickLine={false} axisLine={false} tickMargin={8} width={0} tick={false} />
               <Tooltip
                 cursor={{ fill: "var(--muted)", opacity: .70, stroke: "var(--border)" }}
