@@ -106,33 +106,64 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const isArea = hydrated.type === "area"
   const isBar = hydrated.type === "bar"
 
+  const categoriesCount = hydrated.data.length
+  const computedWidth = Math.max(categoriesCount * 80, 600)
+
+  const renderSeries = (isGhost = false) =>
+    yKeys.map((series, idx) => (
+      <SeriesComponent
+        key={`${series.key}-${idx}`}
+        dataKey={series.key}
+        name={series.label || series.key}
+        stroke={isGhost ? "transparent" : series.color || COLORS[idx % COLORS.length]}
+        fill={isGhost ? "transparent" : series.color || COLORS[idx % COLORS.length]}
+        strokeWidth={2}
+        {...(isLine || isArea ? { type: "monotone" } : {})}
+        {...(isLine ? { activeDot: { r: 5 } } : {})}
+        {...(isBar ? { barSize: 16 } : {})}
+        {...(isArea ? { stackId: "stack" } : {})}
+      />
+    ))
+
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <ChartComponent data={hydrated.data} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
-        <XAxis dataKey={xKey} tickLine={false} axisLine={false} tickMargin={8} />
-        <YAxis allowDecimals tickLine={false} axisLine={false} tickMargin={8} />
-        <Tooltip
-          cursor={{ fill: "var(--muted)", opacity: .70, stroke: "var(--border)" }}
-          content={<ChartTooltipContent />}
-        />
-        <Legend />
-        {yKeys.map((series, idx) => (
-          <SeriesComponent
-            key={`${series.key}-${idx}`}
-            dataKey={series.key}
-            name={series.label || series.key}
-            stroke={series.color || COLORS[idx % COLORS.length]}
-            fill={series.color || COLORS[idx % COLORS.length]}
-            strokeWidth={2}
-            {...(isLine || isArea ? { type: "monotone" } : {})}
-            {...(isLine ? { activeDot: { r: 5 } } : {})}
-            {...(isBar ? { barSize: 16 } : {})}
-            {...(isArea ? { stackId: "stack" } : {})}
-          />
-        ))}
-      </ChartComponent>
-    </ResponsiveContainer>
+    <div className="flex h-full w-full">
+      <div className="relative z-10 h-full flex-none">
+        <ResponsiveContainer width={70} height="100%">
+          <ChartComponent data={hydrated.data} margin={{ top: 10, right: 0, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} vertical={false} />
+            <XAxis
+              dataKey={xKey}
+              width={0}
+              height={0}
+              tickLine={false}
+              axisLine={false}
+              tick={false}
+              padding={{ left: 0, right: 0 }}
+            />
+            <YAxis allowDecimals tickLine={false} axisLine={false} tickMargin={8} />
+            {renderSeries(true)}
+          </ChartComponent>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="flex-1 overflow-x-auto">
+        <div style={{ width: computedWidth, minWidth: "100%", height: "100%" }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ChartComponent data={hydrated.data} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
+              <XAxis dataKey={xKey} tickLine={false} axisLine={false} tickMargin={8} interval={0} />
+              <YAxis allowDecimals tickLine={false} axisLine={false} tickMargin={8} width={0} tick={false} />
+              <Tooltip
+                cursor={{ fill: "var(--muted)", opacity: .70, stroke: "var(--border)" }}
+                content={<ChartTooltipContent />}
+              />
+              <Legend />
+              {renderSeries()}
+            </ChartComponent>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
   )
 }
 
