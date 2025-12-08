@@ -113,7 +113,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
         <XAxis dataKey={xKey} tickLine={false} axisLine={false} tickMargin={8} />
         <YAxis allowDecimals tickLine={false} axisLine={false} tickMargin={8} />
         <Tooltip
-          cursor={{ fill: "var(--muted)", opacity: 0.28, stroke: "var(--border)" }}
+          cursor={{ fill: "var(--muted)", opacity: .70, stroke: "var(--border)" }}
           content={<ChartTooltipContent />}
         />
         <Legend />
