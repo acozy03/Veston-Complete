@@ -18,6 +18,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import type { TooltipProps } from "recharts"
 import type { ChartSpec } from "@/lib/visualization"
 import { enrichChartSpec } from "@/lib/visualization"
 import { cn } from "@/lib/utils"
@@ -35,6 +36,35 @@ const COLORS = [
 
 type ChartRendererProps = {
   chart: ChartSpec
+}
+
+const ChartTooltipContent = ({ active, payload, label }: TooltipProps<number, string>) => {
+  if (!active || !payload?.length) return null
+
+  const safeLabel = typeof label === "string" || typeof label === "number" ? label : undefined
+
+  return (
+    <div className="border-border/60 bg-background text-foreground/90 min-w-[8rem] rounded-lg border px-3 py-2 text-xs shadow-lg ">
+      {safeLabel !== undefined && <div className="mb-1 text-[11px] font-medium text-foreground">{safeLabel}</div>}
+      <div className="space-y-1">
+        {payload.map((entry) => (
+          <div key={entry.dataKey} className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span
+                className="h-2 w-2 rounded-sm"
+                style={{ backgroundColor: (entry.payload as any)?.fill || entry.color || "var(--chart-1)" }}
+                aria-hidden
+              />
+              <span className="text-muted-foreground">{entry.name || entry.dataKey}</span>
+            </div>
+            <span className="font-mono text-foreground">
+              {typeof entry.value === "number" ? entry.value.toLocaleString() : entry.value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 const ChartRenderer = ({ chart }: ChartRendererProps) => {
@@ -60,7 +90,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
               <Cell key={`${categoryKey}-${index}`} fill={COLORS[index % COLORS.length]} />
             ))}
           </Pie>
-          <Tooltip />
+          <Tooltip content={<ChartTooltipContent />} />
           <Legend />
         </PieChart>
       </ResponsiveContainer>
@@ -82,7 +112,10 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
         <XAxis dataKey={xKey} tickLine={false} axisLine={false} tickMargin={8} />
         <YAxis allowDecimals tickLine={false} axisLine={false} tickMargin={8} />
-        <Tooltip />
+        <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: 0.28, stroke: "var(--border)" }}
+          content={<ChartTooltipContent />}
+        />
         <Legend />
         {yKeys.map((series, idx) => (
           <SeriesComponent
