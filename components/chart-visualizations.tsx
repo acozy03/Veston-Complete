@@ -131,7 +131,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
     ))
 
   return (
-    <div className="flex h-full w-full">
+    <div data-chart-root className="flex h-full w-full">
       <div className="relative z-10 h-full flex-none">
         <ResponsiveContainer width={70} height="100%">
           <ChartComponent data={hydrated.data} margin={{ top: 10, right: 0, bottom: 0, left: 0 }}>

@@ -1,7 +1,6 @@
 "use client"
 
 import { Children, isValidElement, useEffect, useRef, useState } from "react"
-import Image from "next/image"
 import { ScrollArea } from "./ui/scroll-area"
 import { cn } from "@/lib/utils"
 import type { Message } from "./chat-interface"
@@ -31,24 +30,51 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
     const container = messageRefs.current[messageId]
     if (!container) return
 
-    const svg = container.querySelector("svg") as SVGSVGElement | null
-    if (!svg) return
+    const chartRoot = container.querySelector("[data-chart-root]") as HTMLElement | null
+    if (!chartRoot) return
+
+    const svgs = Array.from(chartRoot.querySelectorAll("svg")) as SVGSVGElement[]
+    if (!svgs.length) return
 
     try {
       const serializer = new XMLSerializer()
-      const svgString = serializer.serializeToString(svg)
+      const rootBounds = chartRoot.getBoundingClientRect()
+      const width = Math.round(rootBounds.width || chartRoot.clientWidth || chartRoot.scrollWidth || 800)
+      const height = Math.round(rootBounds.height || chartRoot.clientHeight || chartRoot.scrollHeight || 400)
+
+      const combinedSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+      combinedSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg")
+      combinedSvg.setAttribute("width", `${width}`)
+      combinedSvg.setAttribute("height", `${height}`)
+      combinedSvg.setAttribute("viewBox", `0 0 ${width} ${height}`)
+
+      const background = getComputedStyle(document.documentElement).getPropertyValue("--background").trim()
+      const backgroundRect = document.createElementNS("http://www.w3.org/2000/svg", "rect")
+      backgroundRect.setAttribute("width", "100%")
+      backgroundRect.setAttribute("height", "100%")
+      backgroundRect.setAttribute("fill", background || "#ffffff")
+      combinedSvg.appendChild(backgroundRect)
+
+      svgs.forEach((svg) => {
+        const rect = svg.getBoundingClientRect()
+        const clonedSvg = svg.cloneNode(true) as SVGSVGElement
+        clonedSvg.setAttribute("x", `${rect.left - rootBounds.left}`)
+        clonedSvg.setAttribute("y", `${rect.top - rootBounds.top}`)
+        clonedSvg.setAttribute("width", `${rect.width}`)
+        clonedSvg.setAttribute("height", `${rect.height}`)
+        combinedSvg.appendChild(clonedSvg)
+      })
+
+      const svgString = serializer.serializeToString(combinedSvg)
       const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" })
       const svgUrl = URL.createObjectURL(svgBlob)
 
-      const img = new Image()
-      const bounds = svg.getBoundingClientRect()
-      const width = bounds.width || svg.clientWidth || Number(svg.getAttribute("width")) || 800
-      const height = bounds.height || svg.clientHeight || Number(svg.getAttribute("height")) || 400
+      const exportImage = new window.Image()
 
       await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve()
-        img.onerror = (err) => reject(err)
-        img.src = svgUrl
+        exportImage.onload = () => resolve()
+        exportImage.onerror = (err) => reject(err)
+        exportImage.src = svgUrl
       })
 
       const canvas = document.createElement("canvas")
@@ -57,10 +83,7 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
       const ctx = canvas.getContext("2d")
       if (!ctx) throw new Error("Canvas not supported")
 
-      const background = getComputedStyle(document.documentElement).getPropertyValue("--background").trim()
-      ctx.fillStyle = background || "#ffffff"
-      ctx.fillRect(0, 0, width, height)
-      ctx.drawImage(img, 0, 0, width, height)
+      ctx.drawImage(exportImage, 0, 0, width, height)
 
       URL.revokeObjectURL(svgUrl)
 
