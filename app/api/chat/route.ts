@@ -4,6 +4,21 @@ import { createServerSupabase } from "@/lib/supabase/server"
 // Single n8n classifier webhook endpoint
 const N8N_CLASSIFIER_URL = process.env.N8N_CLASSIFIER_URL
 
+const normalizeVisualizations = (value: unknown): unknown | null => {
+  console.log(value); 
+  if (Array.isArray(value)) return value
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return typeof parsed === 'object' && parsed !== null ? parsed : null
+    } catch {
+      return null
+    }
+  }
+  if (value && typeof value === 'object') return value
+  return null
+}
+
 export async function POST(req: Request) {
   try {
     const {
@@ -259,61 +274,71 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
     if (s?.url) reply = stripUrlFromText(reply, s.url)
   }
 }
-    // Save assistant reply to messages (capture id for source linking)
-    const { data: assistantInsert, error: assistantErr } = await supabase
-      .from('messages')
-      .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: reply })
-      .select('id')
-      .single()
 
-    if (assistantErr) {
-      console.error('Failed to insert assistant message', assistantErr)
+  const normalizedVisualizations = normalizeVisualizations(visualizations)
+  if (normalizedVisualizations !== null) {
+    visualizations = normalizedVisualizations
+  }
+  // Save assistant reply to messages (capture id for source linking)
+  const { data: assistantInsert, error: assistantErr } = await supabase
+    .from('messages')
+    .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: reply })
+    .select('id')
+    .single()
+
+  if (assistantErr) {
+    console.error('Failed to insert assistant message', assistantErr)
+  }
+
+  // Opportunistically persist sources if available (ignore if table doesn't exist)
+  if (assistantInsert?.id && Array.isArray(sources) && sources.length > 0) {
+    try {
+      const rows = sources.map((s) => ({
+        message_id: assistantInsert.id as string,
+        chat_id: effectiveChatId,
+        user_email: user.email,
+        url: s.url,
+        title: s.title ?? null,
+        snippet: s.snippet ?? null,
+        score: typeof s.score === 'number' ? s.score : null,
+      }))
+      await supabase.from('message_sources').insert(rows)
+    } catch (e) {
+      console.warn('Skipping source persistence (table missing or RLS blocked):', e)
     }
+  }
 
-    // Opportunistically persist sources if available (ignore if table doesn't exist)
-    if (assistantInsert?.id && Array.isArray(sources) && sources.length > 0) {
-      try {
-        const rows = sources.map((s) => ({
-          message_id: assistantInsert.id as string,
-          chat_id: effectiveChatId,
-          user_email: user.email,
-          url: s.url,
-          title: s.title ?? null,
-          snippet: s.snippet ?? null,
-          score: typeof s.score === 'number' ? s.score : null,
-        }))
-        await supabase.from('message_sources').insert(rows)
-      } catch (e) {
-        console.warn('Skipping source persistence (table missing or RLS blocked):', e)
-      }
+  console.log(assistantInsert, normalizedVisualizations)
+  if (assistantInsert?.id && normalizedVisualizations !== null) {
+    try {
+      await supabase
+        .from('message_visualizations')
+        .upsert(
+          {
+            message_id: assistantInsert.id as string,
+            chat_id: effectiveChatId,
+            user_email: user.email,
+            visualizations: normalizedVisualizations,
+          },
+          { onConflict: 'message_id,chat_id,user_email' },
+        )
+
+      const vizSummary = Array.isArray(normalizedVisualizations)
+        ? `count=${normalizedVisualizations.length}`
+        : `type=${typeof normalizedVisualizations}`
+      console.log('[chat] stored visualizations', vizSummary)
+    } catch (e) {
+      console.warn('Skipping visualization persistence:', e)
     }
+  }
 
-    // Log workflow run
-    await supabase.from('workflow_runs').insert({
-      user_id: user.id,
-      user_email: user.email,
-      chat_id: effectiveChatId,
-      message_id: userMessageId,
-      classifier_path: 'N8N_CLASSIFIER',
-      payload: {
-        question: effectiveQuestion,
-        mode,
-        fast: fast === true,
-        slow: slow === true,
-        radmapping: radmapping === true,
-        RAG: RAG === true,
-        noWorkflow: noWorkflow === true,
-      },
-      status: 'succeeded',
-    })
-
-    return NextResponse.json({
-      reply,
-      raw: workflowJson ?? workflowText,
-      chatId: effectiveChatId,
-      sources,
-      visualizations,
-    })
+  return NextResponse.json({
+    reply,
+    raw: workflowJson ?? workflowText,
+    chatId: effectiveChatId,
+    sources,
+    visualizations,
+  })
     
   } catch (error) {
     console.error("Chat API error", error)
