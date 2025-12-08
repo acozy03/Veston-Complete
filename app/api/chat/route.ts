@@ -309,35 +309,14 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
   }
 
   console.log(assistantInsert, normalizedVisualizations)
-  if (assistantInsert?.id && normalizedVisualizations !== null) {
-    try {
-      await supabase
-        .from('message_visualizations')
-        .upsert(
-          {
-            message_id: assistantInsert.id as string,
-            chat_id: effectiveChatId,
-            user_email: user.email,
-            visualizations: normalizedVisualizations,
-          },
-          { onConflict: 'message_id,chat_id,user_email' },
-        )
-
-      const vizSummary = Array.isArray(normalizedVisualizations)
-        ? `count=${normalizedVisualizations.length}`
-        : `type=${typeof normalizedVisualizations}`
-      console.log('[chat] stored visualizations', vizSummary)
-    } catch (e) {
-      console.warn('Skipping visualization persistence:', e)
-    }
-  }
-
   return NextResponse.json({
     reply,
     raw: workflowJson ?? workflowText,
     chatId: effectiveChatId,
     sources,
     visualizations,
+    userMessageId,
+    assistantMessageId: assistantInsert?.id ?? null,
   })
     
   } catch (error) {

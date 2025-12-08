@@ -269,12 +269,34 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       // swallow; table may not exist yet or RLS not configured
     }
 
+    let visualsByMessage: Record<string, ChartSpec[]> = {}
+    try {
+      const ids = (data || []).map((m) => m.id as string)
+      if (ids.length > 0) {
+        const { data: vizRows } = await supabase
+          .from("message_visualizations")
+          .select("message_id, visualizations")
+          .in("message_id", ids)
+          .eq("chat_id", chatId)
+          .eq("user_email", userEmail || "")
+        if (Array.isArray(vizRows)) {
+          for (const r of vizRows) {
+            const mid = String(r.message_id)
+            visualsByMessage[mid] = prepareChartSpecs((r as any).visualizations)
+          }
+        }
+      }
+    } catch {
+      // swallow; table may not exist yet or RLS not configured
+    }
+
     const msgs: Message[] = (data || []).map((m) => ({
       id: m.id as string,
       role: (m.role as "user" | "assistant" | "system" | "tool") === "assistant" ? "assistant" : "user",
       content: m.content as string,
       timestamp: new Date(m.created_at as string),
       sources: sourcesByMessage[String(m.id)] || undefined,
+      visuals: visualsByMessage[String(m.id)] || undefined,
     }))
     if (msgs.length > 0) {
       newlyCreatedChatIds.current.delete(chatId)
@@ -535,6 +557,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       } catch {
         parsed = null
       }
+      const parsedJson = typeof parsed === "object" && parsed !== null ? (parsed as any) : null
 
       if (!response.ok) {
         const errorMessage =
@@ -549,6 +572,9 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           ? (parsed as { reply: string }).reply
           : responseText
 
+      const serverAssistantId = typeof parsedJson?.assistantMessageId === "string" && parsedJson.assistantMessageId
+        ? (parsedJson.assistantMessageId as string)
+        : undefined
       const serverCharts = extractChartsFromPayload(parsed)
       const rawPayload = typeof parsed === "object" && parsed !== null ? (parsed as any).raw : undefined
       let charts = serverCharts
@@ -572,7 +598,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           : undefined
 
       const assistantMessage: Message = {
-        id: generateId(),
+        id: serverAssistantId || generateId(),
         role: "assistant",
         content: replyText,
         timestamp: new Date(),
@@ -593,7 +619,6 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
       // Capture server chat id if provided and reconcile local temp chat
       try {
-        const parsedJson = typeof parsed === "object" && parsed !== null ? (parsed as any) : null
         const returnedChatId = parsedJson?.chatId as string | undefined
         if (typeof returnedChatId === "string" && returnedChatId) {
           // If we created a local chat first (no server id yet), replace its id with the server id
@@ -607,6 +632,29 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           setServerChatId(returnedChatId)
         }
       } catch {}
+
+      const targetChatId =
+        (typeof parsedJson?.chatId === "string" && parsedJson.chatId)
+          || serverChatId
+          || requestChatId
+          || activeChat?.id
+          || ""
+
+      if (charts.length > 0 && serverAssistantId && targetChatId) {
+        try {
+          await fetch("/api/visuals/store", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chatId: targetChatId,
+              messageId: serverAssistantId,
+              visualizations: charts,
+            }),
+          })
+        } catch (error) {
+          console.warn("[visuals] store:failed", error)
+        }
+      }
 
       // Reload messages from DB using the server chat id if available
       const idToLoad = (typeof parsed === "object" && parsed !== null && (parsed as any).chatId) || serverChatId
