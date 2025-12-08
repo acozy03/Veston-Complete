@@ -26,11 +26,11 @@ export async function POST(req: Request) {
         {
           role: "system",
           content:
-            "Return a single word `yes` indicating whether the user wants a data visualization (chart/graph) in the response.",
+            "Return a single word `yes` or 'no' indicating whether the user's query facilitates a data visualization (chart/graph) in the response. This can be through any sort of graph like a pie chart, bar chart, line graph, etc. Most of the time visualizations are good, so really only say no when the query has nothing to do with anything quantitative or numeric.",
         },
         {
           role: "user",
-          content: `Question: ${question}\nAnswer only yes.`,
+          content: `Question: ${question}`,
         },
       ],
     })
