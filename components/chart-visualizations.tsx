@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useRef, useState } from "react"
 import {
   Area,
   AreaChart,
@@ -22,6 +22,8 @@ import type { TooltipProps } from "recharts"
 import type { ChartSpec } from "@/lib/visualization"
 import { enrichChartSpec } from "@/lib/visualization"
 import { cn } from "@/lib/utils"
+import { exportChartImage } from "@/lib/export-chart"
+import { ImageDown, Loader2 } from "lucide-react"
 
 const COLORS = [
   "#7C3AED",
@@ -152,7 +154,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       </div>
 
       <div className="flex-1 overflow-x-auto">
-        <div style={{ width: computedWidth, minWidth: "100%", height: "100%" }}>
+        <div data-chart-canvas style={{ width: computedWidth, minWidth: "100%", height: "100%" }}>
           <ResponsiveContainer width="100%" height="100%">
             <ChartComponent data={hydrated.data} margin={{ top: 10, right: 20, bottom: 32, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
@@ -184,29 +186,93 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
 type ChartVisualizationsProps = {
   charts: ChartSpec[]
   className?: string
+  contextId?: string
 }
 
-export function ChartVisualizations({ charts, className }: ChartVisualizationsProps) {
+export function ChartVisualizations({ charts, className, contextId }: ChartVisualizationsProps) {
   if (!charts.length) return null
+
+  const chartRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [exportingId, setExportingId] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<{ id: string; message: string } | null>(null)
+
+  const handleExport = async (chart: ChartSpec, fallbackId: string) => {
+    const chartId = chart.id || fallbackId
+    const container = chartRefs.current[chartId]
+    setExportError(null)
+    if (!container) {
+      setExportError({ id: chartId, message: "Chart is not ready to export yet." })
+      return
+    }
+
+    const chartRoot = container.querySelector("[data-chart-root]") as HTMLElement | null
+    if (!chartRoot) {
+      setExportError({ id: chartId, message: "Chart content could not be found." })
+      return
+    }
+
+    setExportingId(chartId)
+    try {
+      await exportChartImage({
+        chartRoot,
+        chartId: contextId ? `${contextId}-${chartId}` : chartId,
+        title: chart.title,
+        description: chart.description,
+      })
+    } catch (error) {
+      console.error("Failed to export chart", error)
+      setExportError({ id: chartId, message: "Export failed. Please try again." })
+    } finally {
+      setExportingId(null)
+    }
+  }
 
   return (
     <div className={cn("space-y-4", className)}>
-      {charts.map((chart, idx) => (
-        <div key={chart.id || idx} className="rounded-lg border border-border/70 bg-muted/30 p-4">
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-foreground">{chart.title || "Visualization"}</div>
-              {chart.description && <p className="text-xs text-muted-foreground">{chart.description}</p>}
+      {charts.map((chart, idx) => {
+        const chartDomId = chart.id || `chart-${idx + 1}`
+
+        return (
+          <div
+            key={chartDomId}
+            className="rounded-lg border border-border/70 bg-muted/30 p-4"
+            ref={(el) => {
+              chartRefs.current[chartDomId] = el
+            }}
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-foreground">{chart.title || "Visualization"}</div>
+                {chart.description && <p className="text-xs text-muted-foreground">{chart.description}</p>}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground shadow-sm transition hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => handleExport(chart, chartDomId)}
+                  disabled={exportingId === chartDomId}
+                >
+                  {exportingId === chartDomId ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Exporting…
+                    </>
+                  ) : (
+                    <>
+                      <ImageDown className="h-3.5 w-3.5" /> Export chart
+                    </>
+                  )}
+                </button>
+                <div className="rounded-md bg-background px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {chart.type} chart
+                </div>
+              </div>
             </div>
-            <div className="rounded-md bg-background px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-              {chart.type} chart
+            <div className="h-72 w-full">
+              <ChartRenderer chart={chart} />
             </div>
+            {exportError?.id === chartDomId && <p className="mt-2 text-xs text-destructive">{exportError.message}</p>}
           </div>
-          <div className="h-72 w-full">
-            <ChartRenderer chart={chart} />
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

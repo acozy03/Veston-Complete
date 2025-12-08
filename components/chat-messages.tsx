@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import type { Message } from "./chat-interface"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { Copy, Check, ImageDown } from "lucide-react"
+import { Copy, Check } from "lucide-react"
 import { ChartVisualizations } from "./chart-visualizations"
 
 interface ChatMessagesProps {
@@ -18,84 +18,10 @@ interface ChatMessagesProps {
 export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" })
   }, [messages.length, isTyping])
-
-  const handleExportChart = async (messageId: string) => {
-    if (!messageId) return
-
-    const container = messageRefs.current[messageId]
-    if (!container) return
-
-    const chartRoot = container.querySelector("[data-chart-root]") as HTMLElement | null
-    if (!chartRoot) return
-
-    const svgs = Array.from(chartRoot.querySelectorAll("svg")) as SVGSVGElement[]
-    if (!svgs.length) return
-
-    try {
-      const serializer = new XMLSerializer()
-      const rootBounds = chartRoot.getBoundingClientRect()
-      const width = Math.round(rootBounds.width || chartRoot.clientWidth || chartRoot.scrollWidth || 800)
-      const height = Math.round(rootBounds.height || chartRoot.clientHeight || chartRoot.scrollHeight || 400)
-
-      const combinedSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
-      combinedSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg")
-      combinedSvg.setAttribute("width", `${width}`)
-      combinedSvg.setAttribute("height", `${height}`)
-      combinedSvg.setAttribute("viewBox", `0 0 ${width} ${height}`)
-
-      const background = getComputedStyle(document.documentElement).getPropertyValue("--background").trim()
-      const backgroundRect = document.createElementNS("http://www.w3.org/2000/svg", "rect")
-      backgroundRect.setAttribute("width", "100%")
-      backgroundRect.setAttribute("height", "100%")
-      backgroundRect.setAttribute("fill", background || "#ffffff")
-      combinedSvg.appendChild(backgroundRect)
-
-      svgs.forEach((svg) => {
-        const rect = svg.getBoundingClientRect()
-        const clonedSvg = svg.cloneNode(true) as SVGSVGElement
-        clonedSvg.setAttribute("x", `${rect.left - rootBounds.left}`)
-        clonedSvg.setAttribute("y", `${rect.top - rootBounds.top}`)
-        clonedSvg.setAttribute("width", `${rect.width}`)
-        clonedSvg.setAttribute("height", `${rect.height}`)
-        combinedSvg.appendChild(clonedSvg)
-      })
-
-      const svgString = serializer.serializeToString(combinedSvg)
-      const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" })
-      const svgUrl = URL.createObjectURL(svgBlob)
-
-      const exportImage = new window.Image()
-
-      await new Promise<void>((resolve, reject) => {
-        exportImage.onload = () => resolve()
-        exportImage.onerror = (err) => reject(err)
-        exportImage.src = svgUrl
-      })
-
-      const canvas = document.createElement("canvas")
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext("2d")
-      if (!ctx) throw new Error("Canvas not supported")
-
-      ctx.drawImage(exportImage, 0, 0, width, height)
-
-      URL.revokeObjectURL(svgUrl)
-
-      const pngUrl = canvas.toDataURL("image/png")
-      const link = document.createElement("a")
-      link.href = pngUrl
-      link.download = `${messageId || "chart"}.png`
-      link.click()
-    } catch (error) {
-      console.error("Failed to export chart", error)
-    }
-  }
 
   const formatTimestamp = (d?: Date) => {
     if (!d || !(d instanceof Date) || Number.isNaN(d.getTime())) return ""
@@ -122,11 +48,6 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
               <div
                 key={message.id}
                 className="w-full"
-                ref={(el) => {
-                  if (message.id) {
-                    messageRefs.current[message.id] = el
-                  }
-                }}
               >
                 {message.role === "assistant" ? (
                   <div className="w-full border-b border-border/60 bg-background/60 px-2 py-6 sm:px-0">
@@ -218,7 +139,7 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
 
                     {message.visuals && message.visuals.length > 0 && (
                       <div className="mt-4">
-                        <ChartVisualizations charts={message.visuals} />
+                        <ChartVisualizations charts={message.visuals} contextId={message.id} />
                       </div>
                     )}
 
@@ -226,15 +147,6 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
                       <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground opacity-70">
                         <div>{message.timestamp ? formatTimestamp(message.timestamp) : ''}</div>
                         <div className="flex items-center gap-2">
-                          {message.visuals && message.visuals.length > 0 && (
-                            <button
-                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-muted/60"
-                              title="Export chart as PNG"
-                              onClick={() => message.id && handleExportChart(message.id)}
-                            >
-                              <ImageDown className="h-3.5 w-3.5" /> Export chart
-                            </button>
-                          )}
                           <button
                             className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-muted/60"
                             title={copiedId === message.id ? "Copied" : "Copy"}
