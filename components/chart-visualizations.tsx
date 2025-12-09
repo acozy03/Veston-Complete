@@ -134,30 +134,11 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
 
   return (
     <div data-chart-root className="flex h-full w-full">
-      <div className="relative z-10 h-full flex-none">
-        <ResponsiveContainer width={70} height="100%">
-          <ChartComponent data={hydrated.data} margin={{ top: 10, right: 0, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} vertical={false} />
-            <XAxis
-              dataKey={xKey}
-              width={0}
-              height={0}
-              tickLine={false}
-              axisLine={false}
-              tick={false}
-              padding={{ left: 0, right: 0 }}
-            />
-            <YAxis allowDecimals tickLine={false} axisLine={false} tickMargin={8} />
-            {renderSeries(true)}
-          </ChartComponent>
-        </ResponsiveContainer>
-      </div>
-
       <div className="flex-1 overflow-x-auto">
         <div data-chart-canvas style={{ width: computedWidth, minWidth: "100%", height: "100%" }}>
           <ResponsiveContainer width="100%" height="100%">
-            <ChartComponent data={hydrated.data} margin={{ top: 10, right: 20, bottom: 32, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
+            <ChartComponent data={hydrated.data} margin={{ top: 10, right: 20, bottom: 32, left: 12 }}>
+              <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} vertical={false} />
               <XAxis
                 dataKey={xKey}
                 tickLine={false}
@@ -168,7 +149,14 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
                 textAnchor="start"
                 tickFormatter={(value) => truncateLabel(value)}
               />
-              <YAxis allowDecimals tickLine={false} axisLine={false} tickMargin={8} width={0} tick={false} />
+              <YAxis
+                allowDecimals
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                width={48}
+                domain={[(dataMin: number) => Math.min(0, dataMin), "auto"]}
+              />
               <Tooltip
                 cursor={{ fill: "var(--muted)", opacity: .70, stroke: "var(--border)" }}
                 content={<ChartTooltipContent />}
