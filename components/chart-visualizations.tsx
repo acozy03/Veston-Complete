@@ -251,7 +251,7 @@ export function ChartVisualizations({ charts, className, contextId }: ChartVisua
                 </button>
               </div>
             </div>
-            <div className="h-72 w-full">
+            <div className="h-100 w-full">
               <ChartRenderer chart={chart} />
             </div>
             {exportError?.id === chartDomId && <p className="mt-2 text-xs text-destructive">{exportError.message}</p>}
