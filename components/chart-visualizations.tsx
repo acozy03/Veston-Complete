@@ -76,7 +76,6 @@ const ChartTooltipContent = ({ active, payload, label }: TooltipProps<number, st
 
 const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const hydrated = useMemo(() => enrichChartSpec(chart), [chart])
-
   if (hydrated.type === "pie") {
     const categoryKey = hydrated.categoryKey || "label"
     const valueKey = hydrated.valueKey || "value"
@@ -146,11 +145,13 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
                 tickMargin={12}
                 interval={0}
                 angle={65}
+                label={{ value: xKey, position: "middle" }}
                 textAnchor="start"
                 tickFormatter={(value) => truncateLabel(value)}
               />
               <YAxis
                 allowDecimals
+                label={{ value: yKeys[0].label, position: 'insideLeft', angle: -90 }}
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
