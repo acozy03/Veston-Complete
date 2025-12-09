@@ -90,9 +90,9 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
                           code: ({ inline, className, children, ...props }) => {
                             if (!inline) {
                               return (
-                                <pre className="markdown-codeblock">
+                                <span className="markdown-codeblock">
                                   <code className={className} {...props}>{children}</code>
-                                </pre>
+                                </span>
                               )
                             }
                             return (
