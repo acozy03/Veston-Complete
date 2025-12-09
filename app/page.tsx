@@ -1,9 +1,16 @@
 import ChatInterface from "@/components/chat-interface.client"
 import { createServerSupabase } from "@/lib/supabase/server"
 
-export default async function Home() {
+type PageProps = {
+  searchParams?: { chatId?: string | string[] }
+}
+
+export default async function Home({ searchParams }: PageProps) {
   let initialChats: Array<{ id: string; title: string; createdAt: Date }> = []
-  let initialChatId = ""
+  const requestedChatId = Array.isArray(searchParams?.chatId)
+    ? searchParams?.chatId?.[0]
+    : searchParams?.chatId
+  let initialChatId = requestedChatId || ""
   let initialMessages: Array<{ id: string; role: "user" | "assistant"; content: string; timestamp: Date }> = []
   let user: { name?: string; email?: string; avatarUrl?: string } | undefined
 
@@ -22,12 +29,14 @@ export default async function Home() {
         .eq("user_email", u.email)
         .order("updated_at", { ascending: false })
       initialChats = (chats || []).map((c) => ({ id: c.id as string, title: (c.title as string) || "New Chat", createdAt: new Date(c.created_at as string) }))
-      if (initialChats[0]?.id) {
-        initialChatId = initialChats[0].id
+      const resolvedInitialChatId =
+        (requestedChatId && initialChats.find((chat) => chat.id === requestedChatId)?.id) || initialChats[0]?.id || ""
+      if (resolvedInitialChatId) {
+        initialChatId = resolvedInitialChatId
         const { data: msgs } = await supabase
           .from("messages")
           .select("id, role, content, created_at")
-          .eq("chat_id", initialChatId)
+          .eq("chat_id", resolvedInitialChatId)
           .eq("user_email", u.email)
           .order("created_at", { ascending: true })
         initialMessages = (msgs || []).map((m) => ({

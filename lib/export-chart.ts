@@ -5,6 +5,11 @@ type ExportFormat = "png" | "svg"
 type ChartExportOptions = {
   chartRoot: HTMLElement
   chartId: string
+  /**
+   * Optional container to use as a fallback when searching for elements
+   * like the chart canvas area.
+   */
+  componentRoot?: HTMLElement
   title?: string
   description?: string
   format?: ExportFormat
@@ -16,18 +21,24 @@ const createSvgElement = <K extends keyof SVGElementTagNameMap>(tag: K) =>
 export async function exportChartImage({
   chartRoot,
   chartId,
+  componentRoot,
   title,
   description,
   format = "png",
 }: ChartExportOptions) {
   const svgs = Array.from(chartRoot.querySelectorAll("svg")) as SVGSVGElement[]
   if (!svgs.length) {
-    throw new Error("No SVG content found to export")
+    throw new Error(
+      `No <svg> elements found in ${chartId || "the chart"}. Make sure the chart has finished rendering before exporting.`,
+    )
   }
 
   const chartBounds = chartRoot.getBoundingClientRect()
   const svgRects = svgs.map((svg) => svg.getBoundingClientRect())
-  const canvasArea = chartRoot.querySelector<HTMLElement>("[data-chart-canvas]")
+  const canvasArea =
+    chartRoot.querySelector<HTMLElement>("[data-chart-canvas]") ??
+    componentRoot?.querySelector<HTMLElement>("[data-chart-canvas]") ??
+    null
   const canvasWidth = canvasArea ? Math.max(canvasArea.scrollWidth, canvasArea.clientWidth) : 0
   const canvasHeight = canvasArea ? Math.max(canvasArea.scrollHeight, canvasArea.clientHeight) : 0
 
@@ -114,12 +125,18 @@ export async function exportChartImage({
 
     clonedSvg.setAttribute("x", `${xOffset}`)
     clonedSvg.setAttribute("y", `${yOffset}`)
-    clonedSvg.setAttribute("width", `${rect.width}`)
-    clonedSvg.setAttribute("height", `${rect.height}`)
+    const width = rect.width || svg.viewBox.baseVal?.width || svg.clientWidth || 0
+    const height = rect.height || svg.viewBox.baseVal?.height || svg.clientHeight || 0
 
-    if (!clonedSvg.getAttribute("viewBox")) {
-      clonedSvg.setAttribute("viewBox", `0 0 ${rect.width} ${rect.height}`)
-    }
+    clonedSvg.setAttribute("width", `${width}`)
+    clonedSvg.setAttribute("height", `${height}`)
+
+    const viewBox =
+      clonedSvg.getAttribute("viewBox") ||
+      (svg.viewBox.baseVal?.width && svg.viewBox.baseVal?.height
+        ? `0 0 ${svg.viewBox.baseVal.width} ${svg.viewBox.baseVal.height}`
+        : `0 0 ${width} ${height}`)
+    clonedSvg.setAttribute("viewBox", viewBox)
 
     composedSvg.appendChild(clonedSvg)
   })

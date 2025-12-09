@@ -12,6 +12,7 @@ import { ThemeToggle } from "./theme-toggle"
 import { createClient } from "@/lib/supabase/client"
 import type { ChartSpec } from "@/lib/visualization"
 import { prepareChartSpecs, stringifyForPrompt } from "@/lib/visualization"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 export type Source = {
   url: string
@@ -103,6 +104,9 @@ type ChatInterfaceProps = {
 }
 
 export default function ChatInterface({ initialChats = [], initialChatId = "", initialMessages = [], user }: ChatInterfaceProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [chats, setChats] = useState<Chat[]>(
     initialChatId && initialMessages.length
@@ -140,6 +144,39 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   ] as const
   const [heroTitle, setHeroTitle] = useState<string>("")
   const newlyCreatedChatIds = useRef<Set<string>>(new Set())
+  const storageKey = useMemo(() => `activeChat:${userEmail || "anon"}`, [userEmail])
+
+  const persistActiveChatId = (chatId: string | null) => {
+    try {
+      if (typeof window !== "undefined") {
+        if (chatId) {
+          localStorage.setItem(storageKey, chatId)
+        } else {
+          localStorage.removeItem(storageKey)
+        }
+      }
+    } catch {}
+
+    try {
+      const params = new URLSearchParams(searchParams.toString())
+      if (chatId) {
+        params.set("chatId", chatId)
+      } else {
+        params.delete("chatId")
+      }
+      const query = params.toString()
+      const target = `${pathname}${query ? `?${query}` : ""}`
+      router.replace(target, { scroll: false })
+    } catch {}
+  }
+
+  const selectChat = (chatId: string, options?: { serverId?: string }) => {
+    setCurrentChatId(chatId)
+    if (options?.serverId !== undefined) {
+      setServerChatId(options.serverId)
+    }
+    persistActiveChatId(chatId)
+  }
 
   // Load chats on mount if none provided
   useEffect(() => {
@@ -173,10 +210,11 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         setChats(mapped)
         // Load a short preview (last message) for each chat to enable search/snippets
         void loadPreviews(mapped)
-        if (mapped[0]?.id) {
-          setCurrentChatId(mapped[0].id)
-          setServerChatId(mapped[0].id)
-          await loadMessages(mapped[0].id)
+        const preferredChatId =
+          (currentChatId && mapped.some((c) => c.id === currentChatId) && currentChatId) || mapped[0]?.id || ""
+        if (preferredChatId) {
+          selectChat(preferredChatId, { serverId: preferredChatId })
+          await loadMessages(preferredChatId)
         }
       }
     }
@@ -191,6 +229,25 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     setHeroTitle(title)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Hydrate current chat from persisted sources (URL first, then localStorage)
+  useEffect(() => {
+    const urlChatId = searchParams.get("chatId") || ""
+    let storedChatId = ""
+    try {
+      if (!urlChatId && typeof window !== "undefined") {
+        storedChatId = localStorage.getItem(storageKey) || ""
+      }
+    } catch {}
+
+    const nextChatId = urlChatId || initialChatId || storedChatId
+    if (nextChatId && nextChatId !== currentChatId) {
+      setCurrentChatId(nextChatId)
+      if (!serverChatId && nextChatId === initialChatId) {
+        setServerChatId(nextChatId)
+      }
+    }
+  }, [currentChatId, initialChatId, searchParams, serverChatId, storageKey])
 
   // Load persisted chat mode preference
   useEffect(() => {
@@ -347,6 +404,23 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const shouldShowHero = !hasMessages && !heroExiting && !isLoadingCurrentChat
 
   useEffect(() => {
+    if (!currentChatId && chats[0]?.id) {
+      selectChat(chats[0].id, { serverId: chats[0].id })
+      void loadMessages(chats[0].id)
+      return
+    }
+
+    if (currentChatId && chats.length > 0 && !currentChat) {
+      const fallbackId = chats[0]?.id || ""
+      if (fallbackId) {
+        selectChat(fallbackId, { serverId: fallbackId })
+        void loadMessages(fallbackId)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chats, currentChatId])
+
+  useEffect(() => {
     // Always cancel any in-flight animation timeout before scheduling a new one.
     if (heroExitTimeoutRef.current) {
       clearTimeout(heroExitTimeoutRef.current)
@@ -431,7 +505,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       }
       newlyCreatedChatIds.current.add(local.id)
       setChats([local, ...chats])
-      setCurrentChatId(local.id)
+      selectChat(local.id, { serverId: "" })
       setServerChatId("")
       return
     }
@@ -443,8 +517,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     }
     newlyCreatedChatIds.current.add(created.id)
     setChats((prev) => [created, ...prev])
-    setCurrentChatId(created.id)
-    setServerChatId(created.id)
+    selectChat(created.id, { serverId: created.id })
   }
 
   const handleSendQuestion = async (question: string) => {
@@ -471,7 +544,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       }
       newlyCreatedChatIds.current.add(activeChat.id)
       setChats([activeChat, ...chats])
-      setCurrentChatId(activeChat.id)
+      selectChat(activeChat.id, { serverId: createdId || serverChatId })
       if (createdId) setServerChatId(createdId)
     }
 
@@ -627,7 +700,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
             setChats((prev) =>
               prev.map((c) => (c.id === localId ? { ...c, id: returnedChatId } : c)),
             )
-            setCurrentChatId(returnedChatId)
+            selectChat(returnedChatId)
           }
           setServerChatId(returnedChatId)
         }
@@ -720,11 +793,10 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       newlyCreatedChatIds.current.delete(chatId)
       setChats(updatedChats)
       if (currentChatId === chatId && updatedChats.length > 0) {
-        setCurrentChatId(updatedChats[0].id)
-        setServerChatId(updatedChats[0].id)
+        selectChat(updatedChats[0].id, { serverId: updatedChats[0].id })
         void loadMessages(updatedChats[0].id)
       } else if (updatedChats.length === 0) {
-        setCurrentChatId("")
+        selectChat("")
         setServerChatId("")
       }
     }
@@ -736,7 +808,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       <ChatSidebar
         chats={chats}
         currentChatId={currentChatId}
-        onSelectChat={setCurrentChatId}
+        onSelectChat={(id) => selectChat(id, { serverId: id })}
         onNewChat={handleNewChat}
         onDeleteChat={handleDeleteChat}
         isOpen={sidebarOpen}

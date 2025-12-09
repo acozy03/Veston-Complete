@@ -76,7 +76,11 @@ const ChartTooltipContent = ({ active, payload, label }: TooltipProps<number, st
 
 const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const hydrated = useMemo(() => enrichChartSpec(chart), [chart])
-  if (hydrated.type === "pie") {
+  const isPie = hydrated.type === "pie"
+  const categoriesCount = hydrated.data.length
+  const computedWidth = Math.max(categoriesCount * 80, isPie ? 420 : 600)
+
+  const renderPieChart = () => {
     const categoryKey = hydrated.categoryKey || "label"
     const valueKey = hydrated.valueKey || "value"
 
@@ -112,9 +116,6 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const isArea = hydrated.type === "area"
   const isBar = hydrated.type === "bar"
 
-  const categoriesCount = hydrated.data.length
-  const computedWidth = Math.max(categoriesCount * 80, 600)
-
   const renderSeries = (isGhost = false) =>
     yKeys.map((series, idx) => (
       <SeriesComponent
@@ -131,41 +132,49 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       />
     ))
 
+  const renderCartesianChart = () => (
+    <ResponsiveContainer width="100%" height="100%">
+      <ChartComponent data={hydrated.data} margin={{ top: 10, right: 20, bottom: 32, left: 12 }}>
+        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} vertical={false} />
+        <XAxis
+          dataKey={xKey}
+          tickLine={false}
+          axisLine={false}
+          tickMargin={12}
+          interval={0}
+          angle={65}
+          label={{ value: xKey, position: "middle" }}
+          textAnchor="start"
+          tickFormatter={(value) => truncateLabel(value)}
+        />
+        <YAxis
+          allowDecimals
+          label={{ value: yKeys[0].label, position: 'insideLeft', angle: -90 }}
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          width={48}
+          domain={[(dataMin: number) => Math.min(0, dataMin), "auto"]}
+        />
+        <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: .70, stroke: "var(--border)" }}
+          content={<ChartTooltipContent />}
+        />
+        <Legend />
+        {renderSeries()}
+      </ChartComponent>
+    </ResponsiveContainer>
+  )
+
   return (
     <div data-chart-root className="flex h-full w-full">
       <div className="flex-1 overflow-x-auto">
-        <div data-chart-canvas style={{ width: computedWidth, minWidth: "100%", height: "100%" }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <ChartComponent data={hydrated.data} margin={{ top: 10, right: 20, bottom: 32, left: 12 }}>
-              <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} vertical={false} />
-              <XAxis
-                dataKey={xKey}
-                tickLine={false}
-                axisLine={false}
-                tickMargin={12}
-                interval={0}
-                angle={65}
-                label={{ value: xKey, position: "middle" }}
-                textAnchor="start"
-                tickFormatter={(value) => truncateLabel(value)}
-              />
-              <YAxis
-                allowDecimals
-                label={{ value: yKeys[0].label, position: 'insideLeft', angle: -90 }}
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                width={48}
-                domain={[(dataMin: number) => Math.min(0, dataMin), "auto"]}
-              />
-              <Tooltip
-                cursor={{ fill: "var(--muted)", opacity: .70, stroke: "var(--border)" }}
-                content={<ChartTooltipContent />}
-              />
-              <Legend />
-              {renderSeries()}
-            </ChartComponent>
-          </ResponsiveContainer>
+        <div
+          data-chart-canvas
+          className="h-full px-2 py-2"
+          style={{ width: computedWidth, minWidth: "100%", height: "100%", minHeight: 320 }}
+        >
+          {isPie ? renderPieChart() : renderCartesianChart()}
         </div>
       </div>
     </div>
@@ -204,6 +213,7 @@ export function ChartVisualizations({ charts, className, contextId }: ChartVisua
     try {
       await exportChartImage({
         chartRoot,
+        componentRoot: container,
         chartId: contextId ? `${contextId}-${chartId}` : chartId,
         title: chart.title,
         description: chart.description,

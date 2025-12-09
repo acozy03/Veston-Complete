@@ -31,7 +31,7 @@ export async function POST(req: Request) {
         {
           role: "system",
           content:
-            "You create concise JSON chart specs for Recharts with keys: charts (array). Each chart has id, type (line|bar|area|pie), title, description, data (array of objects), xKey, yKeys (array of {key,label,color}), categoryKey, valueKey. Always provide a distinct hex color for every yKeys entry. Only include data you can derive from the provided context and keep datasets small (<=8 rows).",
+            "You create concise JSON chart specs for Recharts with keys: charts (array). Each chart has id, type (line|bar|area|pie), title, description, data (array of objects), xKey, yKeys (array of {key,label,color}), categoryKey, valueKey. Always provide a distinct hex color for every yKeys entry. Only include data you can derive from the provided context.",
         },
         {
           role: "user",
