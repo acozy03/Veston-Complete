@@ -61,7 +61,6 @@
     "react-markdown": "^9.0.1",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.4",
-    "recharts-to-png": "^2.4.1",
     "remark-gfm": "^4.0.0",
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.5.5",
