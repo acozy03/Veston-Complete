@@ -2,14 +2,15 @@ import ChatInterface from "@/components/chat-interface.client"
 import { createServerSupabase } from "@/lib/supabase/server"
 
 type PageProps = {
-  searchParams?: { chatId?: string | string[] }
+  searchParams?: Promise<{ chatId?: string | string[] }>
 }
 
 export default async function Home({ searchParams }: PageProps) {
+  const resolvedSearchParams = (await searchParams) || {}
   let initialChats: Array<{ id: string; title: string; createdAt: Date }> = []
-  const requestedChatId = Array.isArray(searchParams?.chatId)
-    ? searchParams?.chatId?.[0]
-    : searchParams?.chatId
+  const requestedChatId = Array.isArray(resolvedSearchParams.chatId)
+    ? resolvedSearchParams.chatId?.[0]
+    : resolvedSearchParams.chatId
   let initialChatId = requestedChatId || ""
   let initialMessages: Array<{ id: string; role: "user" | "assistant"; content: string; timestamp: Date }> = []
   let user: { name?: string; email?: string; avatarUrl?: string } | undefined
