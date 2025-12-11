@@ -13,6 +13,7 @@ import {
   Pie,
   PieChart,
   Cell,
+  Sankey,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -77,8 +78,9 @@ const ChartTooltipContent = ({ active, payload, label }: TooltipProps<number, st
 const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const hydrated = useMemo(() => enrichChartSpec(chart), [chart])
   const isPie = hydrated.type === "pie"
+  const isSankey = hydrated.type === "sankey"
   const categoriesCount = hydrated.data.length
-  const computedWidth = Math.max(categoriesCount * 80, isPie ? 420 : 600)
+  const computedWidth = Math.max(categoriesCount * 80, isPie ? 420 : isSankey ? 760 : 600)
 
   const renderPieChart = () => {
     const categoryKey = hydrated.categoryKey || "label"
@@ -103,6 +105,52 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
           <Tooltip content={<ChartTooltipContent />} />
         
         </PieChart>
+      </ResponsiveContainer>
+    )
+  }
+
+  const renderSankeyChart = () => {
+    const nodes = hydrated.nodes || []
+    const links = hydrated.links || []
+
+    const nodeLabelLimit = 18
+    const SankeyNode = (props: any) => {
+      const { x, y, width, height, index, payload } = props
+      const color = payload.color || COLORS[index % COLORS.length]
+      const label = truncateLabel(payload.name, nodeLabelLimit)
+      return (
+        <g>
+          <rect x={x} y={y} width={width} height={height} fill={color} stroke="#f8fafc" strokeWidth={1.25} />
+          {payload.name && (
+            <text
+              x={x + width / 2}
+              y={y + height / 2}
+              textAnchor="middle"
+              dy={4}
+              className="fill-foreground"
+              style={{ fontSize: 11 }}
+            >
+              {label}
+            </text>
+          )}
+        </g>
+      )
+    }
+
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <Sankey
+          width={720}
+          height={320}
+          data={{ nodes, links }}
+          nodePadding={28}
+          nodeWidth={18}
+          linkCurvature={0.5}
+          node={SankeyNode}
+          nodeId="id"
+        >
+          <Tooltip content={<ChartTooltipContent />} />
+        </Sankey>
       </ResponsiveContainer>
     )
   }
@@ -172,7 +220,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
           className="h-full px-2 py-2"
           style={{ width: computedWidth, minWidth: "100%", height: "100%", minHeight: 320 }}
         >
-          {isPie ? renderPieChart() : renderCartesianChart()}
+          {isSankey ? renderSankeyChart() : isPie ? renderPieChart() : renderCartesianChart()}
         </div>
       </div>
     </div>

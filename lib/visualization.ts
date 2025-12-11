@@ -4,9 +4,22 @@ export type ChartSeries = {
   color?: string
 }
 
+export type SankeyNode = {
+  id: string
+  name: string
+  color?: string
+}
+
+export type SankeyLink = {
+  source: string
+  target: string
+  value: number
+  color?: string
+}
+
 export type ChartSpec = {
   id: string
-  type: "line" | "bar" | "area" | "pie"
+  type: "line" | "bar" | "area" | "pie" | "sankey"
   title?: string
   description?: string
   data: Array<Record<string, string | number>>
@@ -14,6 +27,8 @@ export type ChartSpec = {
   yKeys?: ChartSeries[]
   categoryKey?: string
   valueKey?: string
+  nodes?: SankeyNode[]
+  links?: SankeyLink[]
 }
 
 const palette = [
@@ -51,6 +66,27 @@ const normalizeRow = (row: unknown) => {
   ) as Record<string, string | number>
 }
 
+const normalizeSankeyNode = (raw: unknown, idx: number): SankeyNode | null => {
+  if (!raw || typeof raw !== "object") return null
+  const obj = raw as Record<string, unknown>
+  const name = typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : undefined
+  const id = typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : name || `node-${idx + 1}`
+  if (!id || !name) return null
+  const color = typeof obj.color === "string" && obj.color.trim() ? obj.color.trim() : palette[idx % palette.length]
+  return { id, name, color }
+}
+
+const normalizeSankeyLink = (raw: unknown): SankeyLink | null => {
+  if (!raw || typeof raw !== "object") return null
+  const obj = raw as Record<string, unknown>
+  const source = typeof obj.source === "string" && obj.source.trim() ? obj.source.trim() : undefined
+  const target = typeof obj.target === "string" && obj.target.trim() ? obj.target.trim() : undefined
+  const value = isNumeric(obj.value) ? Number(obj.value) : undefined
+  if (!source || !target || typeof value !== "number" || !Number.isFinite(value)) return null
+  const color = typeof obj.color === "string" && obj.color.trim() ? obj.color.trim() : undefined
+  return { source, target, value, color }
+}
+
 export const normalizeChartSpecs = (raw: unknown): ChartSpec[] => {
   if (!Array.isArray(raw)) return []
   return raw
@@ -58,12 +94,28 @@ export const normalizeChartSpecs = (raw: unknown): ChartSpec[] => {
       if (!entry || typeof entry !== "object") return null
       const obj = entry as Record<string, unknown>
       const data = Array.isArray(obj.data) ? obj.data.map(normalizeRow) : []
-      if (data.length === 0) return null
 
       const type =
-        obj.type === "line" || obj.type === "bar" || obj.type === "area" || obj.type === "pie"
+        obj.type === "line" ||
+        obj.type === "bar" ||
+        obj.type === "area" ||
+        obj.type === "pie" ||
+        obj.type === "sankey"
           ? obj.type
           : "bar"
+
+      const nodes =
+        type === "sankey" && Array.isArray(obj.nodes)
+          ? (obj.nodes as unknown[]).map(normalizeSankeyNode).filter(Boolean) as SankeyNode[]
+          : undefined
+
+      const links =
+        type === "sankey" && Array.isArray(obj.links)
+          ? (obj.links as unknown[]).map(normalizeSankeyLink).filter(Boolean) as SankeyLink[]
+          : undefined
+
+      if (type !== "sankey" && data.length === 0) return null
+      if (type === "sankey" && (!nodes?.length || !links?.length)) return null
 
       const yKeys: ChartSeries[] | undefined = Array.isArray(obj.yKeys)
         ? (obj.yKeys as unknown[])
@@ -85,6 +137,8 @@ export const normalizeChartSpecs = (raw: unknown): ChartSpec[] => {
         id: typeof obj.id === "string" && obj.id ? obj.id : `chart-${index + 1}`,
         type,
         data,
+        nodes,
+        links,
         xKey: typeof obj.xKey === "string" && obj.xKey ? obj.xKey : undefined,
         yKeys,
         categoryKey: typeof obj.categoryKey === "string" && obj.categoryKey ? obj.categoryKey : undefined,
@@ -99,6 +153,17 @@ export const normalizeChartSpecs = (raw: unknown): ChartSpec[] => {
 }
 
 export const enrichChartSpec = (chart: ChartSpec): ChartSpec => {
+  if (chart.type === "sankey") {
+    const nodes = chart.nodes || []
+    const links = chart.links || []
+    const nodeById = new Map(nodes.map((n) => [n.id, n]))
+    const colorizedLinks = links.map((link, idx) => ({
+      ...link,
+      color: link.color || nodeById.get(link.source)?.color || palette[idx % palette.length],
+    }))
+    return { ...chart, nodes, links: colorizedLinks }
+  }
+
   if (chart.type === "pie") {
     const firstRow = chart.data[0] || {}
     const entries = Object.entries(firstRow)
@@ -132,7 +197,9 @@ export const enrichChartSpec = (chart: ChartSpec): ChartSpec => {
 
 export const prepareChartSpecs = (raw: unknown): ChartSpec[] => {
   const normalized = normalizeChartSpecs(raw)
-  return normalized.map((chart) => enrichChartSpec(chart)).filter((chart) => chart.data.length > 0)
+  return normalized
+    .map((chart) => enrichChartSpec(chart))
+    .filter((chart) => (chart.type === "sankey" ? chart.nodes?.length && chart.links?.length : chart.data.length > 0))
 }
 
 export const stringifyForPrompt = (raw: unknown, limit = 3000) => {

@@ -21,12 +21,12 @@ export async function POST(req: Request) {
     const completion = await client.chat.completions.create({
       model: MODEL,
       max_tokens: 5,
-      temperature: 0,
+      temperature: 2,
       messages: [
         {
           role: "system",
           content:
-            "Return a single word `yes` or 'no' indicating whether the user's query facilitates a data visualization (chart/graph) in the response. This can be through any sort of graph like a pie chart, bar chart, line graph, etc. Most of the time visualizations are good, so really only say no when the query has nothing to do with anything quantitative or numeric.",
+            "Return a single word `yes` or 'no' indicating whether the user's query facilitates a data visualization (chart/graph) in the response. This can be through any sort of graph like a pie chart, bar chart, line graph, etc. The answer should always be 'yes' if the user is asking about an accession number. Most of the time visualizations are good.",
         },
         {
           role: "user",
