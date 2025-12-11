@@ -35,6 +35,10 @@ export async function exportChartImage({
 
   const chartBounds = chartRoot.getBoundingClientRect()
   const svgRects = svgs.map((svg) => svg.getBoundingClientRect())
+  const legendWrappers = Array.from(
+    chartRoot.querySelectorAll<HTMLElement>(".recharts-legend-wrapper"),
+  )
+  const legendRects = legendWrappers.map((legend) => legend.getBoundingClientRect())
   const canvasArea =
     chartRoot.querySelector<HTMLElement>("[data-chart-canvas]") ??
     componentRoot?.querySelector<HTMLElement>("[data-chart-canvas]") ??
@@ -44,11 +48,13 @@ export async function exportChartImage({
 
   const maxX = Math.max(
     ...svgRects.map((rect) => rect.left - chartBounds.left + rect.width),
+    ...legendRects.map((rect) => rect.left - chartBounds.left + rect.width),
     canvasWidth,
     chartRoot.scrollWidth || chartRoot.clientWidth,
   )
   const maxY = Math.max(
     ...svgRects.map((rect) => rect.top - chartBounds.top + rect.height),
+    ...legendRects.map((rect) => rect.top - chartBounds.top + rect.height),
     canvasHeight,
     chartRoot.scrollHeight || chartRoot.clientHeight,
   )
@@ -139,6 +145,59 @@ export async function exportChartImage({
     clonedSvg.setAttribute("viewBox", viewBox)
 
     composedSvg.appendChild(clonedSvg)
+  })
+
+  legendWrappers.forEach((legend, idx) => {
+    const rect = legendRects[idx]
+    const xOffset = paddingX + rect.left - chartBounds.left
+    const yOffset = cursorY + rect.top - chartBounds.top
+    const legendGroup = createSvgElement("g")
+    legendGroup.setAttribute("transform", `translate(${xOffset}, ${yOffset})`)
+
+    const legendItems = Array.from(legend.querySelectorAll<HTMLLIElement>("li"))
+    legendItems.forEach((item) => {
+      const itemRect = item.getBoundingClientRect()
+      const itemX = itemRect.left - rect.left
+      const itemY = itemRect.top - rect.top
+      const iconEl =
+        item.querySelector<HTMLElement>(".recharts-legend-icon") ??
+        item.querySelector<HTMLElement>("svg") ??
+        undefined
+      const color =
+        iconEl?.style.color ||
+        iconEl?.getAttribute("fill") ||
+        iconEl?.getAttribute("stroke") ||
+        foreground
+      const swatch = createSvgElement("rect")
+      swatch.setAttribute("x", `${itemX}`)
+      swatch.setAttribute("y", `${itemY + 5}`)
+      swatch.setAttribute("width", "10")
+      swatch.setAttribute("height", "10")
+      swatch.setAttribute("fill", color)
+
+      const label = (item.textContent || "").trim()
+      const labelText = createSvgElement("text")
+      labelText.setAttribute("x", `${itemX + 14}`)
+      labelText.setAttribute("y", `${itemY + 14}`)
+      labelText.setAttribute("fill", foreground)
+      labelText.setAttribute("font-family", fontFamily)
+      labelText.setAttribute("font-size", "12")
+      labelText.textContent = label
+
+      legendGroup.appendChild(swatch)
+      legendGroup.appendChild(labelText)
+    })
+
+    const legendBg = createSvgElement("rect")
+    legendBg.setAttribute("x", "0")
+    legendBg.setAttribute("y", "0")
+    legendBg.setAttribute("width", `${rect.width}`)
+    legendBg.setAttribute("height", `${rect.height}`)
+    legendBg.setAttribute("fill", background)
+    legendBg.setAttribute("opacity", "0")
+
+    legendGroup.insertBefore(legendBg, legendGroup.firstChild)
+    composedSvg.appendChild(legendGroup)
   })
 
   const svgString = serializer.serializeToString(composedSvg)
