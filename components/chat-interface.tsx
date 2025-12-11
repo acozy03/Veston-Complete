@@ -240,14 +240,34 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       }
     } catch {}
 
-    const nextChatId = urlChatId || initialChatId || storedChatId
-    if (nextChatId && nextChatId !== currentChatId) {
-      setCurrentChatId(nextChatId)
-      if (!serverChatId && nextChatId === initialChatId) {
-        setServerChatId(nextChatId)
+    const knownChatIds = new Set(chats.map((chat) => chat.id))
+    const preferredChatId = [urlChatId, initialChatId, storedChatId].find(
+      (id) => id && knownChatIds.has(id),
+    )
+    if (preferredChatId && preferredChatId !== currentChatId) {
+      setCurrentChatId(preferredChatId)
+      if (!serverChatId && preferredChatId === initialChatId) {
+        setServerChatId(preferredChatId)
+      }
+      return
+    }
+
+    if (!preferredChatId) {
+      const fallbackId = chats[0]?.id || ""
+      if (fallbackId) {
+        if (currentChatId !== fallbackId) {
+          selectChat(fallbackId, { serverId: fallbackId })
+          void loadMessages(fallbackId)
+        } else if (urlChatId !== fallbackId) {
+          persistActiveChatId(fallbackId)
+        }
+      } else if (currentChatId || urlChatId) {
+        selectChat("")
+        setServerChatId("")
       }
     }
-  }, [currentChatId, initialChatId, searchParams, serverChatId, storageKey])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chats, currentChatId, initialChatId, searchParams, serverChatId, storageKey])
 
   // Load persisted chat mode preference
   useEffect(() => {
