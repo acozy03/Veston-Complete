@@ -101,7 +101,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
             ))}
           </Pie>
           <Tooltip content={<ChartTooltipContent />} />
-          <Legend />
+        
         </PieChart>
       </ResponsiveContainer>
     )
@@ -143,13 +143,11 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
           tickMargin={12}
           interval={0}
           angle={65}
-          label={{ value: xKey, position: "middle" }}
           textAnchor="start"
           tickFormatter={(value) => truncateLabel(value)}
         />
         <YAxis
           allowDecimals
-          label={{ value: yKeys[0].label, position: 'insideLeft', angle: -90 }}
           tickLine={false}
           axisLine={false}
           tickMargin={8}
@@ -160,7 +158,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
           cursor={{ fill: "var(--muted)", opacity: .70, stroke: "var(--border)" }}
           content={<ChartTooltipContent />}
         />
-        <Legend />
+        <Legend verticalAlign="top" height={36} />
         {renderSeries()}
       </ChartComponent>
     </ResponsiveContainer>
