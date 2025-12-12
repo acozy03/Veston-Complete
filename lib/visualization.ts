@@ -157,7 +157,8 @@ export const enrichChartSpec = (chart: ChartSpec): ChartSpec => {
     const nodes = chart.nodes || []
     const links = chart.links || []
     const nodeById = new Map(nodes.map((n) => [n.id, n]))
-    const colorizedLinks = links.map((link, idx) => ({
+    const validLinks = links.filter((link) => nodeById.has(link.source) && nodeById.has(link.target))
+    const colorizedLinks = validLinks.map((link, idx) => ({
       ...link,
       color: link.color || nodeById.get(link.source)?.color || palette[idx % palette.length],
     }))

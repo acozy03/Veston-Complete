@@ -112,6 +112,28 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const renderSankeyChart = () => {
     const nodes = hydrated.nodes || []
     const links = hydrated.links || []
+    console.log("nodes, links", nodes, links)
+    const nodeIds = new Set(nodes.map((n) => n.id))
+    const missingSources = links.map((l) => l.source).filter((id) => id && !nodeIds.has(id))
+    const missingTargets = links.map((l) => l.target).filter((id) => id && !nodeIds.has(id))
+    const idToIndex = new Map(nodes.map((n, idx) => [n.id, idx]))
+    const resolvedLinks = links
+      .map((link) => {
+        const sourceIdx = idToIndex.get(link.source)
+        const targetIdx = idToIndex.get(link.target)
+        if (sourceIdx === undefined || targetIdx === undefined) return null
+        return { ...link, source: sourceIdx, target: targetIdx }
+      })
+      .filter(Boolean) as Array<{ source: number; target: number; value: number; color?: string }>
+
+    if (!nodes.length || !resolvedLinks.length || missingSources.length || missingTargets.length) {
+      const missing = [...new Set([...missingSources, ...missingTargets])]
+      return (
+        <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border/60 bg-muted/40 text-xs text-muted-foreground">
+          Unable to render sankey chart: missing valid nodes/links{missing.length ? ` (missing ids: ${missing.join(", ")})` : ""}.
+        </div>
+      )
+    }
 
     const nodeLabelLimit = 18
     const SankeyNode = (props: any) => {
@@ -142,7 +164,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
         <Sankey
           width={720}
           height={320}
-          data={{ nodes, links }}
+          data={{ nodes, links: resolvedLinks }}
           nodePadding={28}
           nodeWidth={18}
           linkCurvature={0.5}
