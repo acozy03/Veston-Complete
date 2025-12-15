@@ -142,8 +142,10 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
     const SankeyNode = (props: any) => {
       const { x, y, width, height, index, payload, ...events } = props
       const chartWidth = computedWidth || 0
-      const showLeft = chartWidth ? x + width + 8 > chartWidth : false
-      const labelX = showLeft ? x - 8 : x + width + 8
+      const approxLabelWidth = Math.min(payload.name?.length || 0, nodeLabelLimit) * 6
+      const totalRightSpace = x + width + approxLabelWidth + 12
+      const showLeft = chartWidth ? totalRightSpace > chartWidth : false
+      const labelX = showLeft ? Math.max(8, x - 10) : x + width + 10
       const anchor = showLeft ? "end" : "start"
       const color = payload.color || COLORS[index % COLORS.length]
       const label = truncateLabel(payload.name, nodeLabelLimit)
@@ -179,11 +181,18 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
         ? data.sourceLinks?.reduce((sum: number, link: any) => sum + (Number(link.value) || 0), 0) || 0
         : undefined
 
-      const title = isNode
-        ? data.name
-        : [data.source?.name || data.source?.id || data.source, data.target?.name || data.target?.id || data.target]
-            .filter(Boolean)
-            .join(" → ") || data.name
+      const resolveNodeLabel = (nodeRef: any) => {
+        if (nodeRef?.name || nodeRef?.id) return nodeRef.name || nodeRef.id
+        if (typeof nodeRef === "number") return nodes[nodeRef]?.name || nodes[nodeRef]?.id || `${nodeRef}`
+        if (typeof nodeRef === "string") return nodes[idToIndex.get(nodeRef) ?? -1]?.name || nodeRef
+        return undefined
+      }
+
+      const linkTitle = [resolveNodeLabel(data?.source), resolveNodeLabel(data?.target)]
+        .filter(Boolean)
+        .join(" → ")
+
+      const title = isNode ? data.name || resolveNodeLabel(data.id) : linkTitle || data.name
 
       return (
         <div className="border-border/60 bg-background text-foreground/90 min-w-[12rem] rounded-lg border px-3 py-2 text-xs shadow-lg">
