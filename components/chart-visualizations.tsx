@@ -137,17 +137,21 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
 
     const nodeLabelLimit = 18
     const SankeyNode = (props: any) => {
-      const { x, y, width, height, index, payload } = props
+      const { x, y, width, height, index, payload, ...events } = props
+      const chartWidth = computedWidth || 0
+      const showLeft = chartWidth ? x + width + 8 > chartWidth : false
+      const labelX = showLeft ? x - 8 : x + width + 8
+      const anchor = showLeft ? "end" : "start"
       const color = payload.color || COLORS[index % COLORS.length]
       const label = truncateLabel(payload.name, nodeLabelLimit)
       return (
-        <g>
+        <g {...events}>
           <rect x={x} y={y} width={width} height={height} fill={color} stroke="#f8fafc" strokeWidth={1.25} />
           {payload.name && (
             <text
-              x={x + width / 2}
+              x={labelX}
               y={y + height / 2}
-              textAnchor="middle"
+              textAnchor={anchor}
               dy={4}
               className="fill-foreground"
               style={{ fontSize: 11 }}
@@ -165,8 +169,8 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
           width={720}
           height={320}
           data={{ nodes, links: resolvedLinks }}
-          nodePadding={28}
-          nodeWidth={18}
+          nodePadding={50}
+          nodeWidth={30}
           linkCurvature={0.5}
           node={SankeyNode}
           nodeId="id"

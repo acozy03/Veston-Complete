@@ -54,52 +54,70 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
                     <div className={cn("markdown text-foreground/90")}> 
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
-                        components={{
-                          a: ({ node, href, children, ...props }) => {
-                            const url = typeof href === 'string' ? href : ''
-                            const isXlsx = /\.xlsx(\?|$)/i.test(url) || /filename=.*\.xlsx/i.test(url) || /application%2Fvnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/i.test(url)
-                            if (isXlsx && url) {
-                              const previewUrl = `/preview/xlsx?src=${encodeURIComponent(url)}`
-                              const downloadUrl = `/api/proxy-file?src=${encodeURIComponent(url)}&download=1`
-                              return (
-                                <span>
-                                  <a href={previewUrl} target="_blank" rel="noopener noreferrer" {...props}>Open preview</a>
-                                  <span className="mx-2 opacity-50">·</span>
-                                  <a href={downloadUrl} rel="noopener noreferrer">Download</a>
-                                </span>
-                              )
-                            }
-                            return <a href={url} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
-                          },
-                          p: ({ node, children, ...props }) => {
-                            const containsPre = Children.toArray(children).some(
-                              (child) => isValidElement(child) && typeof child.type === 'string' && child.type === 'pre',
-                            )
+components={{
+  a: ({ node, href, children, ...props }) => {
+    const url = typeof href === "string" ? href : ""
+    const isXlsx =
+      /\.xlsx(\?|$)/i.test(url) ||
+      /filename=.*\.xlsx/i.test(url) ||
+      /application%2Fvnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/i.test(url)
 
-                            const Component = containsPre ? 'div' : 'p'
+    if (isXlsx && url) {
+      const previewUrl = `/preview/xlsx?src=${encodeURIComponent(url)}`
+      const downloadUrl = `/api/proxy-file?src=${encodeURIComponent(url)}&download=1`
+      return (
+        <span>
+          <a href={previewUrl} target="_blank" rel="noopener noreferrer" {...props}>
+            Open preview
+          </a>
+          <span className="mx-2 opacity-50">·</span>
+          <a href={downloadUrl} rel="noopener noreferrer">
+            Download
+          </a>
+        </span>
+      )
+    }
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" {...props}>
+        {children}
+      </a>
+    )
+  },
 
-                            return (
-                              <Component
-                                className={cn(containsPre ? undefined : 'whitespace-pre-wrap')}
-                                {...props}
-                              >
-                                {children}
-                              </Component>
-                            )
-                          },
-                          code: ({ inline, className, children, ...props }) => {
-                            if (!inline) {
-                              return (
-                                <pre className="markdown-codeblock">
-                                  <code className={className} {...props}>{children}</code>
-                                </pre>
-                              )
-                            }
-                            return (
-                              <code className={cn("markdown-codeinline", className)} {...props}>{children}</code>
-                            )
-                          },
-                        }}
+  p: ({ node, children, ...props }) => {
+    const containsPre = Children.toArray(children).some(
+      (child) => isValidElement(child) && typeof child.type === "string" && child.type === "pre",
+    )
+    const Component = containsPre ? "div" : "p"
+    return (
+      <Component className={cn(containsPre ? undefined : "whitespace-pre-wrap")} {...props}>
+        {children}
+      </Component>
+    )
+  },
+
+  pre: ({ node, children, ...props }) => (
+    <pre className="markdown-codeblock bg-muted/40" {...props}>
+      {children}
+    </pre>
+  ),
+
+  code: ({ inline, className, children, ...props }) => {
+    if (inline) {
+      return (
+        <code className={cn("markdown-codeinline bg-muted/40", className)} {...props}>
+          {children}
+        </code>
+      )
+    }
+    return (
+      <code className={cn(className, "block py-3 px-4")} {...props}>
+        {children}
+      </code>
+    )
+  },
+}}
+
                       >
                         {message.content}
                       </ReactMarkdown>
