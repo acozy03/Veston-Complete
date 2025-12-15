@@ -80,7 +80,11 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const isPie = hydrated.type === "pie"
   const isSankey = hydrated.type === "sankey"
   const categoriesCount = hydrated.data.length
-  const computedWidth = Math.max(categoriesCount * 80, isPie ? 420 : isSankey ? 760 : 600)
+  const sankeyNodeCount = hydrated.nodes?.length || 0
+  const computedWidth = Math.max(
+    categoriesCount * 80,
+    isPie ? 420 : isSankey ? Math.max(sankeyNodeCount * 180, 760) : 600,
+  )
 
   const renderPieChart = () => {
     const categoryKey = hydrated.categoryKey || "label"
@@ -112,7 +116,6 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const renderSankeyChart = () => {
     const nodes = hydrated.nodes || []
     const links = hydrated.links || []
-    console.log("nodes, links", nodes, links)
     const nodeIds = new Set(nodes.map((n) => n.id))
     const missingSources = links.map((l) => l.source).filter((id) => id && !nodeIds.has(id))
     const missingTargets = links.map((l) => l.target).filter((id) => id && !nodeIds.has(id))
@@ -148,25 +151,75 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
         <g {...events}>
           <rect x={x} y={y} width={width} height={height} fill={color} stroke="#f8fafc" strokeWidth={1.25} />
           {payload.name && (
-            <text
-              x={labelX}
-              y={y + height / 2}
-              textAnchor={anchor}
-              dy={4}
-              className="fill-foreground"
-              style={{ fontSize: 11 }}
-            >
-              {label}
+            <text x={labelX} y={y + height / 2} textAnchor={anchor} dy={-2} className="fill-foreground" style={{ fontSize: 11 }}>
+              <tspan x={labelX} dy={6} className="font-medium">
+                {label}
+              </tspan>
+              {payload.description && (
+                <tspan x={labelX} dy={13} className="fill-muted-foreground" style={{ fontSize: 10 }}>
+                  {truncateLabel(payload.description, nodeLabelLimit + 6)}
+                </tspan>
+              )}
             </text>
           )}
         </g>
       )
     }
 
+    const SankeyTooltipContent = ({ active, payload }: TooltipProps<number, string>) => {
+      if (!active || !payload?.length) return null
+      const entry = payload[0]
+      const data = entry?.payload as any
+      const isNode = Array.isArray(data?.sourceLinks) && Array.isArray(data?.targetLinks)
+
+      const incoming = isNode
+        ? data.targetLinks?.reduce((sum: number, link: any) => sum + (Number(link.value) || 0), 0) || 0
+        : undefined
+      const outgoing = isNode
+        ? data.sourceLinks?.reduce((sum: number, link: any) => sum + (Number(link.value) || 0), 0) || 0
+        : undefined
+
+      const title = isNode
+        ? data.name
+        : [data.source?.name || data.source?.id || data.source, data.target?.name || data.target?.id || data.target]
+            .filter(Boolean)
+            .join(" → ") || data.name
+
+      return (
+        <div className="border-border/60 bg-background text-foreground/90 min-w-[12rem] rounded-lg border px-3 py-2 text-xs shadow-lg">
+          {title && <div className="mb-1 text-[11px] font-semibold text-foreground">{title}</div>}
+          {isNode && data.description && (
+            <div className="mb-1 text-[11px] text-muted-foreground">{data.description}</div>
+          )}
+          <div className="space-y-1">
+            {isNode ? (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Incoming</span>
+                  <span className="font-mono text-foreground">{incoming?.toLocaleString?.() || incoming || 0}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Outgoing</span>
+                  <span className="font-mono text-foreground">{outgoing?.toLocaleString?.() || outgoing || 0}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Value</span>
+                <span className="font-mono text-foreground">
+                  {typeof entry.value === "number" ? entry.value.toLocaleString() : entry.value}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
+
     return (
       <ResponsiveContainer width="100%" height="100%">
         <Sankey
-          width={720}
+          width={computedWidth}
           height={320}
           data={{ nodes, links: resolvedLinks }}
           nodePadding={50}
@@ -175,7 +228,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
           node={SankeyNode}
           nodeId="id"
         >
-          <Tooltip content={<ChartTooltipContent />} />
+          <Tooltip content={<SankeyTooltipContent />} />
         </Sankey>
       </ResponsiveContainer>
     )

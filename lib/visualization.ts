@@ -7,6 +7,7 @@ export type ChartSeries = {
 export type SankeyNode = {
   id: string
   name: string
+  description?: string
   color?: string
 }
 
@@ -72,8 +73,9 @@ const normalizeSankeyNode = (raw: unknown, idx: number): SankeyNode | null => {
   const name = typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : undefined
   const id = typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : name || `node-${idx + 1}`
   if (!id || !name) return null
+  const description = typeof obj.description === "string" && obj.description.trim() ? obj.description.trim() : undefined
   const color = typeof obj.color === "string" && obj.color.trim() ? obj.color.trim() : palette[idx % palette.length]
-  return { id, name, color }
+  return { id, name, description, color }
 }
 
 const normalizeSankeyLink = (raw: unknown): SankeyLink | null => {
