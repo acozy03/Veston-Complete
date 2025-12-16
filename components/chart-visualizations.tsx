@@ -46,6 +46,35 @@ const truncateLabel = (label: string | number, maxLength = 12) => {
   return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label
 }
 
+const wrapText = (text: string | undefined, maxChars = 16, maxLines = 2) => {
+  if (!text) return [] as string[]
+
+  const words = text.split(/\s+/)
+  const lines: string[] = []
+  let currentLine = ""
+
+  words.forEach((word) => {
+    const tentative = currentLine ? `${currentLine} ${word}` : word
+    if (tentative.length <= maxChars) {
+      currentLine = tentative
+    } else {
+      if (currentLine) lines.push(currentLine)
+      currentLine = word
+    }
+  })
+
+  if (currentLine) lines.push(currentLine)
+
+  if (lines.length > maxLines) {
+    const condensed = lines.slice(0, maxLines)
+    const last = condensed[maxLines - 1]
+    condensed[maxLines - 1] = truncateLabel(last, maxChars)
+    return condensed
+  }
+
+  return lines
+}
+
 const ChartTooltipContent = ({ active, payload, label }: TooltipProps<number, string>) => {
   if (!active || !payload?.length) return null
 
@@ -171,7 +200,11 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       const labelX = showLeft ? Math.max(8, x - 10) : x + width + 10
       const anchor = showLeft ? "end" : "start"
       const color = payload.color || COLORS[index % COLORS.length]
-      const label = truncateLabel(payload.name, nodeLabelLimit)
+      const labelLines = wrapText(payload.name, nodeLabelLimit, 2)
+      const descriptionLines = wrapText(payload.description, nodeLabelLimit + 6, 2)
+      const totalLines = labelLines.length + descriptionLines.length
+      const lineHeight = 12
+      const startY = y + height / 2 - ((totalLines - 1) * lineHeight) / 2
       return (
         <g
           {...events}
@@ -186,15 +219,23 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
         >
           <rect x={x} y={y} width={width} height={height} fill={color} stroke="#f8fafc" strokeWidth={1.25} />
           {payload.name && (
-            <text x={labelX} y={y + height / 2} textAnchor={anchor} dy={-2} className="fill-foreground" style={{ fontSize: 11 }}>
-              <tspan x={labelX} dy={6} className="font-medium">
-                {label}
-              </tspan>
-              {payload.description && (
-                <tspan x={labelX} dy={13} className="fill-muted-foreground" style={{ fontSize: 10 }}>
-                  {truncateLabel(payload.description, nodeLabelLimit + 6)}
+            <text x={labelX} y={startY} textAnchor={anchor} className="fill-foreground" style={{ fontSize: 11 }}>
+              {labelLines.map((line: string, idx: number) => (
+                <tspan key={`${payload.id}-label-${idx}`} x={labelX} dy={idx === 0 ? 0 : lineHeight} className="font-medium">
+                  {line}
                 </tspan>
-              )}
+              ))}
+              {descriptionLines.map((line: string, idx: number) => (
+                <tspan
+                  key={`${payload.id}-desc-${idx}`}
+                  x={labelX}
+                  dy={lineHeight}
+                  className="fill-muted-foreground"
+                  style={{ fontSize: 10 }}
+                >
+                  {line}
+                </tspan>
+              ))}
             </text>
           )}
         </g>
@@ -270,12 +311,6 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
             data.description && <div className="text-[11px] text-muted-foreground">{data.description}</div>
           ) : (
             <div className="space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Value</span>
-                <span className="font-mono text-foreground">
-                  {typeof data?.value === "number" ? data.value.toLocaleString() : data?.value}
-                </span>
-              </div>
               {linkDescriptions.map((item) => (
                 <div key={item?.label} className="text-[11px]">
                   <div className="font-medium text-foreground">{item?.label}</div>
