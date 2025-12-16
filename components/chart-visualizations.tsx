@@ -81,6 +81,16 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const isSankey = hydrated.type === "sankey"
   const categoriesCount = hydrated.data.length
   const sankeyNodeCount = hydrated.nodes?.length || 0
+  const sankeyContainerRef = useRef<HTMLDivElement | null>(null)
+  const [sankeyTooltip, setSankeyTooltip] = useState<
+    | {
+        type: "node" | "link"
+        data: any
+        x: number
+        y: number
+      }
+    | null
+  >(null)
   const computedWidth = Math.max(
     categoriesCount * 80,
     isPie ? 420 : isSankey ? Math.max(sankeyNodeCount * 180, 760) : 600,
@@ -120,6 +130,19 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
     const missingSources = links.map((l) => l.source).filter((id) => id && !nodeIds.has(id))
     const missingTargets = links.map((l) => l.target).filter((id) => id && !nodeIds.has(id))
     const idToIndex = new Map(nodes.map((n, idx) => [n.id, idx]))
+    const updateSankeyTooltip = (type: "node" | "link", data: any, event?: any) => {
+      const container = sankeyContainerRef.current
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      const x = event?.clientX ? event.clientX - rect.left : rect.width / 2
+      const y = event?.clientY ? event.clientY - rect.top : rect.height / 2
+      setSankeyTooltip({ type, data, x, y })
+    }
+
+    const hideSankeyTooltip = (event?: any, events?: any) => {
+      events?.onMouseLeave?.(event)
+      setSankeyTooltip(null)
+    }
     const resolvedLinks = links
       .map((link) => {
         const sourceIdx = idToIndex.get(link.source)
@@ -150,7 +173,17 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       const color = payload.color || COLORS[index % COLORS.length]
       const label = truncateLabel(payload.name, nodeLabelLimit)
       return (
-        <g {...events}>
+        <g
+          {...events}
+          onMouseEnter={(e) => {
+            events?.onMouseEnter?.(e)
+            updateSankeyTooltip("node", payload, e)
+          }}
+          onMouseMove={(e) => {
+            updateSankeyTooltip("node", payload, e)
+          }}
+          onMouseLeave={(e) => hideSankeyTooltip(e, events)}
+        >
           <rect x={x} y={y} width={width} height={height} fill={color} stroke="#f8fafc" strokeWidth={1.25} />
           {payload.name && (
             <text x={labelX} y={y + height / 2} textAnchor={anchor} dy={-2} className="fill-foreground" style={{ fontSize: 11 }}>
@@ -168,11 +201,37 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       )
     }
 
-    const SankeyTooltipContent = ({ active, payload }: TooltipProps<number, string>) => {
-      if (!active || !payload?.length) return null
-      const entry = payload[0]
-      const data = entry?.payload as any
-      const isNode = Array.isArray(data?.sourceLinks) && Array.isArray(data?.targetLinks)
+    const SankeyLink = (props: any) => {
+      const { sourceX, sourceY, sourceControlX, targetX, targetY, targetControlX, linkWidth, payload, ...events } = props
+      const stroke = payload?.color || "#333"
+      return (
+        <path
+          className="recharts-sankey-link"
+          d={`
+          M${sourceX},${sourceY}
+          C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}
+        `}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={linkWidth}
+          strokeOpacity="0.25"
+          {...events}
+          onMouseEnter={(e) => {
+            events?.onMouseEnter?.(e)
+            updateSankeyTooltip("link", payload, e)
+          }}
+          onMouseMove={(e) => {
+            updateSankeyTooltip("link", payload, e)
+          }}
+          onMouseLeave={(e) => hideSankeyTooltip(e, events)}
+        />
+      )
+    }
+
+    const renderSankeyTooltip = () => {
+      if (!sankeyTooltip) return null
+      const { data, type, x, y } = sankeyTooltip
+      const isNode = type === "node"
 
       const incoming = isNode
         ? data.targetLinks?.reduce((sum: number, link: any) => sum + (Number(link.value) || 0), 0) || 0
@@ -195,7 +254,10 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       const title = isNode ? data.name || resolveNodeLabel(data.id) : linkTitle || data.name
 
       return (
-        <div className="border-border/60 bg-background text-foreground/90 min-w-[12rem] rounded-lg border px-3 py-2 text-xs shadow-lg">
+        <div
+          className="pointer-events-none absolute z-10 min-w-[12rem] rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-foreground/90 shadow-lg"
+          style={{ left: x + 12, top: y + 12 }}
+        >
           {title && <div className="mb-1 text-[11px] font-semibold text-foreground">{title}</div>}
           {isNode && data.description && (
             <div className="mb-1 text-[11px] text-muted-foreground">{data.description}</div>
@@ -216,7 +278,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
               <div className="flex items-center justify-between gap-2">
                 <span className="text-muted-foreground">Value</span>
                 <span className="font-mono text-foreground">
-                  {typeof entry.value === "number" ? entry.value.toLocaleString() : entry.value}
+                  {typeof data?.value === "number" ? data.value.toLocaleString() : data?.value}
                 </span>
               </div>
             )}
@@ -226,20 +288,22 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
     }
 
     return (
-      <ResponsiveContainer width="100%" height="100%">
-        <Sankey
-          width={computedWidth}
-          height={320}
-          data={{ nodes, links: resolvedLinks }}
-          nodePadding={50}
-          nodeWidth={30}
-          linkCurvature={0.5}
-          node={SankeyNode}
-          nodeId="id"
-        >
-          <Tooltip content={<SankeyTooltipContent />} />
-        </Sankey>
-      </ResponsiveContainer>
+      <div className="relative h-full w-full" ref={sankeyContainerRef}>
+        <ResponsiveContainer width="100%" height="100%">
+          <Sankey
+            width={computedWidth}
+            height={320}
+            data={{ nodes, links: resolvedLinks }}
+            nodePadding={50}
+            nodeWidth={30}
+            linkCurvature={0.5}
+            node={SankeyNode}
+            link={SankeyLink}
+            nodeId="id"
+          />
+        </ResponsiveContainer>
+        {renderSankeyTooltip()}
+      </div>
     )
   }
 
