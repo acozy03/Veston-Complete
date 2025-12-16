@@ -233,25 +233,32 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       const { data, type, x, y } = sankeyTooltip
       const isNode = type === "node"
 
-      const incoming = isNode
-        ? data.targetLinks?.reduce((sum: number, link: any) => sum + (Number(link.value) || 0), 0) || 0
-        : undefined
-      const outgoing = isNode
-        ? data.sourceLinks?.reduce((sum: number, link: any) => sum + (Number(link.value) || 0), 0) || 0
-        : undefined
-
-      const resolveNodeLabel = (nodeRef: any) => {
-        if (nodeRef?.name || nodeRef?.id) return nodeRef.name || nodeRef.id
-        if (typeof nodeRef === "number") return nodes[nodeRef]?.name || nodes[nodeRef]?.id || `${nodeRef}`
-        if (typeof nodeRef === "string") return nodes[idToIndex.get(nodeRef) ?? -1]?.name || nodeRef
+      const resolveNode = (nodeRef: any) => {
+        if (nodeRef?.id || nodeRef?.name) return nodeRef
+        if (typeof nodeRef === "number") return nodes[nodeRef]
+        if (typeof nodeRef === "string") return nodes[idToIndex.get(nodeRef) ?? -1]
         return undefined
       }
+
+      const resolveNodeLabel = (nodeRef: any) => resolveNode(nodeRef)?.name || resolveNode(nodeRef)?.id || nodeRef
 
       const linkTitle = [resolveNodeLabel(data?.source), resolveNodeLabel(data?.target)]
         .filter(Boolean)
         .join(" → ")
 
       const title = isNode ? data.name || resolveNodeLabel(data.id) : linkTitle || data.name
+      const linkDescriptions = !isNode
+        ? [
+            resolveNode(data?.source)?.description && {
+              label: resolveNodeLabel(data?.source),
+              description: resolveNode(data?.source)?.description,
+            },
+            resolveNode(data?.target)?.description && {
+              label: resolveNodeLabel(data?.target),
+              description: resolveNode(data?.target)?.description,
+            },
+          ].filter(Boolean)
+        : []
 
       return (
         <div
@@ -259,30 +266,24 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
           style={{ left: x + 12, top: y + 12 }}
         >
           {title && <div className="mb-1 text-[11px] font-semibold text-foreground">{title}</div>}
-          {isNode && data.description && (
-            <div className="mb-1 text-[11px] text-muted-foreground">{data.description}</div>
-          )}
-          <div className="space-y-1">
-            {isNode ? (
-              <>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Incoming</span>
-                  <span className="font-mono text-foreground">{incoming?.toLocaleString?.() || incoming || 0}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Outgoing</span>
-                  <span className="font-mono text-foreground">{outgoing?.toLocaleString?.() || outgoing || 0}</span>
-                </div>
-              </>
-            ) : (
+          {isNode ? (
+            data.description && <div className="text-[11px] text-muted-foreground">{data.description}</div>
+          ) : (
+            <div className="space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-muted-foreground">Value</span>
                 <span className="font-mono text-foreground">
                   {typeof data?.value === "number" ? data.value.toLocaleString() : data?.value}
                 </span>
               </div>
-            )}
-          </div>
+              {linkDescriptions.map((item) => (
+                <div key={item?.label} className="text-[11px]">
+                  <div className="font-medium text-foreground">{item?.label}</div>
+                  <div className="text-muted-foreground">{item?.description}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )
     }
