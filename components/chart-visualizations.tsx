@@ -118,7 +118,9 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const categoriesCount = hydrated.data.length
   const sankeyNodeCount = hydrated.nodes?.length || 0
   const sankeyContainerRef = useRef<HTMLDivElement | null>(null)
-  const [selectedSankeyNode, setSelectedSankeyNode] = useState<any | null>(null)
+  const [selectedSankeyItem, setSelectedSankeyItem] = useState<
+    { type: "node" | "link"; data: any } | null
+  >(null)
   const [sankeyTooltip, setSankeyTooltip] = useState<
     | {
         type: "node" | "link"
@@ -200,6 +202,15 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
 
     const nodeLabelLimit = 18
     const labelPadding = 6
+    const resolveNode = (nodeRef: any) => {
+      if (nodeRef?.id || nodeRef?.name) return nodeRef
+      if (typeof nodeRef === "number") return nodes[nodeRef]
+      if (typeof nodeRef === "string") return nodes[idToIndex.get(nodeRef) ?? -1]
+      return undefined
+    }
+
+    const resolveNodeLabel = (nodeRef: any) => resolveNode(nodeRef)?.name || resolveNode(nodeRef)?.id || nodeRef
+
     const SankeyNode = (props: any) => {
       const { x, y, width, height, index, payload, ...events } = props
       const chartWidth = computedWidth || 0
@@ -217,7 +228,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       return (
         <g
           {...events}
-          onClick={() => setSelectedSankeyNode(payload)}
+          onClick={() => setSelectedSankeyItem({ type: "node", data: payload })}
           onMouseEnter={(e) => {
             events?.onMouseEnter?.(e)
             updateSankeyTooltip("node", payload, e)
@@ -267,6 +278,10 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
           strokeWidth={linkWidth}
           strokeOpacity="0.25"
           {...events}
+          onClick={(e) => {
+            events?.onClick?.(e)
+            setSelectedSankeyItem({ type: "link", data: payload })
+          }}
           onMouseEnter={(e) => {
             events?.onMouseEnter?.(e)
             updateSankeyTooltip("link", payload, e)
@@ -283,15 +298,6 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       if (!sankeyTooltip) return null
       const { data, type, x, y } = sankeyTooltip
       const isNode = type === "node"
-
-      const resolveNode = (nodeRef: any) => {
-        if (nodeRef?.id || nodeRef?.name) return nodeRef
-        if (typeof nodeRef === "number") return nodes[nodeRef]
-        if (typeof nodeRef === "string") return nodes[idToIndex.get(nodeRef) ?? -1]
-        return undefined
-      }
-
-      const resolveNodeLabel = (nodeRef: any) => resolveNode(nodeRef)?.name || resolveNode(nodeRef)?.id || nodeRef
 
       const linkTitle = [resolveNodeLabel(data?.source), resolveNodeLabel(data?.target)]
         .filter(Boolean)
@@ -349,13 +355,54 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
           />
         </ResponsiveContainer>
         {renderSankeyTooltip()}
-        <Dialog open={!!selectedSankeyNode} onOpenChange={(open) => !open && setSelectedSankeyNode(null)}>
+        <Dialog open={!!selectedSankeyItem} onOpenChange={(open) => !open && setSelectedSankeyItem(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{selectedSankeyNode?.name || selectedSankeyNode?.id || "Node details"}</DialogTitle>
-              <DialogDescription>
-                {selectedSankeyNode?.description || "No description available for this node."}
-              </DialogDescription>
+              {selectedSankeyItem?.type === "node" ? (
+                <>
+                  <DialogTitle>
+                    {selectedSankeyItem?.data?.name || selectedSankeyItem?.data?.id || "Node details"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {selectedSankeyItem?.data?.description || "No description available for this node."}
+                  </DialogDescription>
+                </>
+              ) : (
+                <>
+                  <DialogTitle>
+                    {[
+                      resolveNodeLabel(selectedSankeyItem?.data?.source),
+                      resolveNodeLabel(selectedSankeyItem?.data?.target),
+                    ]
+                      .filter(Boolean)
+                      .join(" → ") || "Link details"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    <div className="space-y-1 text-foreground">
+                      {resolveNode(selectedSankeyItem?.data?.source)?.description && (
+                        <div>
+                          <div className="font-medium">{resolveNodeLabel(selectedSankeyItem?.data?.source)}</div>
+                          <div className="text-muted-foreground">
+                            {resolveNode(selectedSankeyItem?.data?.source)?.description}
+                          </div>
+                        </div>
+                      )}
+                      {resolveNode(selectedSankeyItem?.data?.target)?.description && (
+                        <div>
+                          <div className="font-medium">{resolveNodeLabel(selectedSankeyItem?.data?.target)}</div>
+                          <div className="text-muted-foreground">
+                            {resolveNode(selectedSankeyItem?.data?.target)?.description}
+                          </div>
+                        </div>
+                      )}
+                      {!resolveNode(selectedSankeyItem?.data?.source)?.description &&
+                        !resolveNode(selectedSankeyItem?.data?.target)?.description && (
+                          <div className="text-muted-foreground">No details available for this link.</div>
+                        )}
+                    </div>
+                  </DialogDescription>
+                </>
+              )}
             </DialogHeader>
           </DialogContent>
         </Dialog>
