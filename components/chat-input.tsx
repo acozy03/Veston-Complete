@@ -24,10 +24,7 @@ interface ChatInputProps {
   RAG: boolean
   isTyping: boolean
   onCancel: () => void
-  onToggleWorkflow: (
-    name: "radmapping" | "RAG",
-    value: boolean,
-  ) => void
+  onToggleWorkflow: (name: "radmapping" | "RAG", value: boolean) => void
   hero?: boolean
   placeholder?: string
   focusSignal?: number
@@ -49,20 +46,29 @@ export function ChatInput({
   const [question, setQuestion] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // Shared sizing tokens so the textarea + icon buttons always match
+  const HERO_H = "h-14"
+  const HERO_W = "w-14"
+  const HERO_RADIUS = "rounded-xl"
+
+  // Non-hero: make icon buttons match a 40px input
+  const BASE_ICON = "h-10 w-10"
+
   useEffect(() => {
     if (focusSignal === undefined) return
-    if (textareaRef.current) {
-      textareaRef.current.focus()
-    }
+    textareaRef.current?.focus()
   }, [focusSignal])
+
+  const resetTextareaHeight = () => {
+    if (!textareaRef.current) return
+    textareaRef.current.style.height = "auto"
+  }
 
   const handleSend = () => {
     if (question.trim()) {
       onSendQuestion(question.trim())
       setQuestion("")
-      if (textareaRef.current) {
-        textareaRef.current.style.height = "auto"
-      }
+      resetTextareaHeight()
     }
   }
 
@@ -75,26 +81,33 @@ export function ChatInput({
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setQuestion(e.target.value)
+
+    // Auto-grow with a hard max
     e.target.style.height = "auto"
     e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`
   }
 
   return (
     <div className={cn(hero ? "p-0" : "border-t border-border bg-background p-4")}>
-      <div className={cn("mx-auto", hero ? "max-w-3xl" : "max-w-3xl")}>
-        <div className="relative flex items-end gap-2">
+      <div className={cn("mx-auto", "max-w-3xl")}>
+        {/* items-center makes the 40px buttons + 40px textarea line up perfectly */}
+        <div className="relative flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                className={cn("mb-2 shrink-0", hero && "mb-0 h-14 w-14 rounded-xl")}
+                className={cn(
+                  "shrink-0 flex items-center justify-center",
+                  hero ? `${HERO_H} ${HERO_W} ${HERO_RADIUS}` : BASE_ICON,
+                )}
                 title="Options"
               >
                 <Plus className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
+
             <DropdownMenuContent align="start" className="w-64">
               <DropdownMenuLabel>Reasoning</DropdownMenuLabel>
               <div className="p-1">
@@ -103,27 +116,24 @@ export function ChatInput({
                     e.preventDefault()
                     onChangeMode("fast")
                   }}
-                  className={cn(
-                    "cursor-pointer",
-                    mode === "fast" && "bg-accent text-accent-foreground",
-                  )}
+                  className={cn("cursor-pointer", mode === "fast" && "bg-accent text-accent-foreground")}
                 >
                   Low (Fast)
                 </DropdownMenuItem>
+
                 <DropdownMenuItem
                   onSelect={(e) => {
                     e.preventDefault()
                     onChangeMode("slow")
                   }}
-                  className={cn(
-                    "cursor-pointer",
-                    mode === "slow" && "bg-accent text-accent-foreground",
-                  )}
+                  className={cn("cursor-pointer", mode === "slow" && "bg-accent text-accent-foreground")}
                 >
                   High (Slow)
                 </DropdownMenuItem>
               </div>
+
               <DropdownMenuSeparator />
+
               <DropdownMenuLabel>Workflows</DropdownMenuLabel>
               <div className="p-1">
                 <DropdownMenuItem
@@ -131,39 +141,38 @@ export function ChatInput({
                     e.preventDefault()
                     onToggleWorkflow("radmapping", !radmapping)
                   }}
-                  className={cn(
-                    "cursor-pointer",
-                    radmapping && "bg-accent text-accent-foreground",
-                  )}
+                  className={cn("cursor-pointer", radmapping && "bg-accent text-accent-foreground")}
                 >
                   RadMapping+
                 </DropdownMenuItem>
+
                 <DropdownMenuItem
                   onSelect={(e) => {
                     e.preventDefault()
                     onToggleWorkflow("RAG", !RAG)
                   }}
-                  className={cn(
-                    "cursor-pointer",
-                    RAG && "bg-accent text-accent-foreground",
-                  )}
+                  className={cn("cursor-pointer", RAG && "bg-accent text-accent-foreground")}
                 >
                   Data Analysis
                 </DropdownMenuItem>
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
+
           <Textarea
             ref={textareaRef}
             value={question}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             placeholder={placeholder || "Ask away..."}
-            className={cn(
-              "w-full flex-1 min-h-[52px] max-h-[200px] resize-none bg-input text-foreground placeholder:text-muted-foreground",
-              hero && "h-14 min-h-0 rounded-xl px-4 py-3 text-base",
-            )}
             rows={1}
+            className={cn(
+              "w-full flex-1 max-h-[200px] resize-none bg-input text-foreground placeholder:text-muted-foreground",
+              // non-hero: explicitly 40px tall so it matches BASE_ICON
+              "h-10 min-h-0 rounded-md px-3 py-2 leading-6",
+              // hero: 56px tall + visually centered single-line text
+              hero && `${HERO_H} min-h-0 ${HERO_RADIUS} px-4 py-0 text-base leading-[3.5rem]`,
+            )}
           />
 
           {isTyping ? (
@@ -172,7 +181,10 @@ export function ChatInput({
               onClick={onCancel}
               size="icon"
               variant="outline"
-              className={cn("mb-2 shrink-0", hero && "mb-0 h-14 w-14 rounded-xl")}
+              className={cn(
+                "shrink-0 flex items-center justify-center",
+                hero ? `${HERO_H} ${HERO_W} ${HERO_RADIUS}` : BASE_ICON,
+              )}
               title="Stop"
             >
               <Square className="h-5 w-5" />
@@ -183,23 +195,21 @@ export function ChatInput({
               disabled={isTyping || !question.trim()}
               size="icon"
               className={cn(
-                "mb-2 shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
-                hero && "mb-0 h-14 w-14 rounded-xl",
+                "shrink-0 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
+                hero ? `${HERO_H} ${HERO_W} ${HERO_RADIUS}` : BASE_ICON,
               )}
+              title="Send"
             >
               <Send className="h-5 w-5" />
             </Button>
           )}
         </div>
+
         {!hero && (
           <p className="mt-2 text-center text-xs text-muted-foreground/80">
             {mode === "slow" ? "High (Slow)" : "Low (Fast)"}
             {" • "}
-            {RAG
-              ? "Data Analysis"
-              : radmapping
-                ? "RadMapping+"
-                : "Workflow: None"}
+            {RAG ? "Data Analysis" : radmapping ? "RadMapping+" : "Workflow: None"}
           </p>
         )}
       </div>
