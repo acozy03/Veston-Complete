@@ -198,7 +198,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     chatId: string,
     message: string,
     placeholder: string,
-    serverChatId?: string,
+    serverChatIdParam?: string,
   ) => {
     if (!chatId || pendingTitleRequests.current.has(chatId)) return
     pendingTitleRequests.current.add(chatId)
@@ -215,12 +215,30 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
       updateChatTitleState(chatId, { titleStatus: "streaming", pendingTitle: generatedTitle })
 
-      if (serverChatId) {
-        void supabase
+      const resolvedServerId = serverChatIdParam || serverChatId
+      if (resolvedServerId) {
+        if (!serverChatId) {
+          setServerChatId(resolvedServerId)
+        }
+
+        const query = supabase
           .from("chats")
           .update({ title: generatedTitle })
-          .eq("id", serverChatId)
-          .eq("user_email", userEmail || "")
+          .eq("id", resolvedServerId)
+
+        const constrainedQuery = userId ? query.eq("user_id", userId) : query
+        void constrainedQuery
+          .select("id")
+          .then(({ data, error }) => {
+            if (error) {
+              console.warn("[chat:title] update failed", error)
+              return
+            }
+            const updatedCount = Array.isArray(data) ? data.length : 0
+            if (updatedCount === 0) {
+              console.warn("[chat:title] no rows updated", { resolvedServerId, userId })
+            }
+          })
       }
 
       const duration = Math.min(2400, Math.max(800, generatedTitle.length * 40))
@@ -594,10 +612,11 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     let requestChatId: string | undefined = serverChatId || undefined
     if (!activeChat) {
       const createdAt = new Date()
-      const { data } = userId
+      const canPersistChat = Boolean(userId || userEmail)
+      const { data } = canPersistChat
         ? await supabase
             .from("chats")
-            .insert({ title: "", user_id: userId, user_email: userEmail || null })
+            .insert({ title: "", user_id: userId || null, user_email: userEmail || null })
             .select("id, created_at")
             .single()
         : { data: null }
