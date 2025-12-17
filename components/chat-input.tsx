@@ -52,7 +52,7 @@ export function ChatInput({
   const HERO_RADIUS = "rounded-xl"
 
   // Non-hero: make icon buttons match a 40px input
-  const BASE_ICON = "h-10 w-10"
+  const BASE_ICON = "h-11 w-11"
 
   useEffect(() => {
     if (focusSignal === undefined) return
@@ -169,7 +169,7 @@ export function ChatInput({
             className={cn(
               "w-full flex-1 max-h-[200px] resize-none bg-input text-foreground placeholder:text-muted-foreground",
               // non-hero: explicitly 40px tall so it matches BASE_ICON
-              "h-10 min-h-0 rounded-md px-3 py-2 leading-6",
+              "h-11 min-h-0 rounded-md px-3 py-2 leading-6",
               // hero: 56px tall + visually centered single-line text
               hero && `${HERO_H} min-h-0 ${HERO_RADIUS} px-4 py-0 text-base leading-[3.5rem]`,
             )}
