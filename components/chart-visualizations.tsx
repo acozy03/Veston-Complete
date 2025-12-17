@@ -25,6 +25,13 @@ import { enrichChartSpec } from "@/lib/visualization"
 import { cn } from "@/lib/utils"
 import { exportChartImage } from "@/lib/export-chart"
 import { ImageDown, Loader2 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 const COLORS = [
   "#7C3AED",
@@ -111,6 +118,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const categoriesCount = hydrated.data.length
   const sankeyNodeCount = hydrated.nodes?.length || 0
   const sankeyContainerRef = useRef<HTMLDivElement | null>(null)
+  const [selectedSankeyNode, setSelectedSankeyNode] = useState<any | null>(null)
   const [sankeyTooltip, setSankeyTooltip] = useState<
     | {
         type: "node" | "link"
@@ -191,13 +199,14 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
     }
 
     const nodeLabelLimit = 18
+    const labelPadding = 6
     const SankeyNode = (props: any) => {
       const { x, y, width, height, index, payload, ...events } = props
       const chartWidth = computedWidth || 0
       const approxLabelWidth = Math.min(payload.name?.length || 0, nodeLabelLimit) * 6
       const totalRightSpace = x + width + approxLabelWidth + 12
       const showLeft = chartWidth ? totalRightSpace > chartWidth : false
-      const labelX = showLeft ? Math.max(8, x - 10) : x + width + 10
+      const labelX = showLeft ? Math.max(labelPadding, x - labelPadding) : x + width + labelPadding
       const anchor = showLeft ? "end" : "start"
       const color = payload.color || COLORS[index % COLORS.length]
       const labelLines = wrapText(payload.name, nodeLabelLimit, 2)
@@ -208,6 +217,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       return (
         <g
           {...events}
+          onClick={() => setSelectedSankeyNode(payload)}
           onMouseEnter={(e) => {
             events?.onMouseEnter?.(e)
             updateSankeyTooltip("node", payload, e)
@@ -339,6 +349,16 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
           />
         </ResponsiveContainer>
         {renderSankeyTooltip()}
+        <Dialog open={!!selectedSankeyNode} onOpenChange={(open) => !open && setSelectedSankeyNode(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{selectedSankeyNode?.name || selectedSankeyNode?.id || "Node details"}</DialogTitle>
+              <DialogDescription>
+                {selectedSankeyNode?.description || "No description available for this node."}
+              </DialogDescription>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }
