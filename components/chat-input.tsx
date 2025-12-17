@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef, type KeyboardEvent } from "react"
+import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
 import { Send, Plus, Square } from "lucide-react"
@@ -30,6 +30,7 @@ interface ChatInputProps {
   ) => void
   hero?: boolean
   placeholder?: string
+  focusSignal?: number
 }
 
 export function ChatInput({
@@ -43,9 +44,17 @@ export function ChatInput({
   onToggleWorkflow,
   hero = false,
   placeholder,
+  focusSignal,
 }: ChatInputProps) {
   const [question, setQuestion] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (focusSignal === undefined) return
+    if (textareaRef.current) {
+      textareaRef.current.focus()
+    }
+  }, [focusSignal])
 
   const handleSend = () => {
     if (question.trim()) {

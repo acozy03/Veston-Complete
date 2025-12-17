@@ -123,7 +123,12 @@ export function ChatSidebar({
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  const displayChats = chats
+  const readyChats = chats.filter((chat) => {
+    const status = chat.titleStatus || "ready"
+    return (status === "ready" || status === "streaming") && ((chat.title || "").trim() || chat.pendingTitle)
+  })
+
+  const displayChats = readyChats
     .map((chat) => ({ chat, matches: true as const }))
 
   const headerPadding = isOpen ? "p-4" : "p-3"

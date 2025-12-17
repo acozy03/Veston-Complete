@@ -34,7 +34,14 @@ export function SpotlightSearch({ open, onOpenChange, chats, onSelectChat }: Spo
   const [loading, setLoading] = useState(false)
 
   const supabase = useMemo(() => createClient(), [])
-  const chatIds = useMemo(() => chats.map((c) => c.id), [chats])
+  const readyChats = useMemo(
+    () => chats.filter((c) => {
+      const status = c.titleStatus || "ready"
+      return (status === "ready" || status === "streaming") && ((c.title || "").trim() || c.pendingTitle)
+    }),
+    [chats],
+  )
+  const chatIds = useMemo(() => readyChats.map((c) => c.id), [readyChats])
 
   // Keyboard shortcut: Ctrl/Cmd+K to open
   useEffect(() => {
@@ -107,8 +114,10 @@ export function SpotlightSearch({ open, onOpenChange, chats, onSelectChat }: Spo
   const chatTitleMatches = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return [] as Chat[]
-    return chats.filter((c) => c.title.toLowerCase().includes(q) || (c.preview?.toLowerCase().includes(q) ?? false)).slice(0, 10)
-  }, [query, chats])
+    return readyChats
+      .filter((c) => c.title.toLowerCase().includes(q) || (c.preview?.toLowerCase().includes(q) ?? false))
+      .slice(0, 10)
+  }, [query, readyChats])
 
   const handleValueChange = (val: string) => {
     setQuery(val)
@@ -137,7 +146,7 @@ export function SpotlightSearch({ open, onOpenChange, chats, onSelectChat }: Spo
         {messageHits.length > 0 && (
           <CommandGroup heading="Messages">
             {messageHits.map((m) => {
-              const chat = chats.find((c) => c.id === m.chat_id)
+              const chat = readyChats.find((c) => c.id === m.chat_id)
               const title = chat?.title || "Untitled Chat"
               const snippet = (m.content || "").slice(0, 120).replace(/\s+/g, " ") + ((m.content?.length || 0) > 120 ? "…" : "")
               return (

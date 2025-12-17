@@ -160,6 +160,8 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const newlyCreatedChatIds = useRef<Set<string>>(new Set())
   const pendingTitleRequests = useRef<Set<string>>(new Set())
   const storageKey = useMemo(() => `activeChat:${userEmail || "anon"}`, [userEmail])
+  const [forceHeroMode, setForceHeroMode] = useState(false)
+  const [heroInputFocusSignal, setHeroInputFocusSignal] = useState(0)
 
   const persistActiveChatId = (chatId: string | null) => {
     try {
@@ -200,7 +202,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   ) => {
     if (!chatId || pendingTitleRequests.current.has(chatId)) return
     pendingTitleRequests.current.add(chatId)
-    updateChatTitleState(chatId, { title: placeholder, titleStatus: "pending", pendingTitle: undefined })
+    updateChatTitleState(chatId, { titleStatus: "pending", pendingTitle: placeholder })
 
     try {
       const res = await fetch("/api/chat/title", {
@@ -235,6 +237,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
   const selectChat = (chatId: string, options?: { serverId?: string }) => {
     setCurrentChatId(chatId)
+    setForceHeroMode(!chatId)
     if (options?.serverId !== undefined) {
       setServerChatId(options.serverId)
     }
@@ -296,6 +299,8 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
   // Hydrate current chat from persisted sources (URL first, then localStorage)
   useEffect(() => {
+    if (forceHeroMode) return
+
     const urlChatId = searchParams.get("chatId") || ""
     let storedChatId = ""
     try {
@@ -331,7 +336,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chats, currentChatId, initialChatId, searchParams, serverChatId, storageKey])
+  }, [chats, currentChatId, forceHeroMode, initialChatId, searchParams, serverChatId, storageKey])
 
   // Load persisted chat mode preference
   useEffect(() => {
@@ -488,6 +493,8 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const shouldShowHero = !hasMessages && !heroExiting && !isLoadingCurrentChat
 
   useEffect(() => {
+    if (forceHeroMode) return
+
     if (!currentChatId && chats[0]?.id) {
       selectChat(chats[0].id, { serverId: chats[0].id })
       void loadMessages(chats[0].id)
@@ -502,7 +509,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chats, currentChatId])
+  }, [chats, currentChatId, forceHeroMode])
 
   useEffect(() => {
     // Always cancel any in-flight animation timeout before scheduling a new one.
@@ -570,69 +577,46 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   }, [currentChatId])
 
   const handleNewChat = async () => {
-    const { data, error } = userId
-      ? await supabase
-          .from("chats")
-          .insert({ title: "New Chat", user_id: userId, user_email: userEmail || null })
-          .select("id, title, created_at")
-          .single()
-      : { data: null, error: new Error("No user id available") as any }
-    if (error || !data) {
-      // eslint-disable-next-line no-console
-      console.error("Failed to create chat", error)
-      // Fallback to local-only chat if needed
-      const local: Chat = {
-        id: generateId(),
-        title: "New Chat",
-        messages: [],
-        createdAt: new Date(),
-        titleStatus: "ready",
-      }
-      newlyCreatedChatIds.current.add(local.id)
-      setChats([local, ...chats])
-      selectChat(local.id, { serverId: "" })
-      setServerChatId("")
-      return
-    }
-    const created: Chat = {
-      id: data.id as string,
-      title: (data.title as string) || "New Chat",
-      messages: [],
-      createdAt: new Date(data.created_at as string),
-      titleStatus: "ready",
-    }
-    newlyCreatedChatIds.current.add(created.id)
-    setChats((prev) => [created, ...prev])
-    selectChat(created.id, { serverId: created.id })
+    try { abortController?.abort() } catch {}
+    setAbortController(null)
+    setIsTyping(false)
+    setTypingChatId(null)
+    setServerChatId("")
+    setLoadingChatId(null)
+    selectChat("")
+    persistActiveChatId(null)
+    setForceHeroMode(true)
+    setHeroInputFocusSignal((v) => v + 1)
   }
 
   const handleSendQuestion = async (question: string) => {
     let activeChat = currentChat
     let requestChatId: string | undefined = serverChatId || undefined
     if (!activeChat) {
-      // Create chat in DB if none selected
-      const { data, error } = userId
+      const createdAt = new Date()
+      const { data } = userId
         ? await supabase
             .from("chats")
-            .insert({ title: "New Chat", user_id: userId, user_email: userEmail || "" })
-            .select("id, title, created_at")
+            .insert({ title: "", user_id: userId, user_email: userEmail || null })
+            .select("id, created_at")
             .single()
-        : { data: null, error: new Error("No user id available") as any }
+        : { data: null }
       const createdId = data?.id as string | undefined
       if (createdId) {
         requestChatId = createdId
+        setServerChatId(createdId)
       }
       activeChat = {
         id: createdId || generateId(),
-        title: (data?.title as string) || "New Chat",
+        title: "",
         messages: [],
-        createdAt: new Date((data?.created_at as string) || Date.now()),
-        titleStatus: "ready",
+        createdAt: new Date((data?.created_at as string) || createdAt),
+        titleStatus: "pending",
       }
       newlyCreatedChatIds.current.add(activeChat.id)
-      setChats([activeChat, ...chats])
+      setForceHeroMode(false)
+      setChats((prev) => [activeChat as Chat, ...prev.filter((c) => c.id !== activeChat?.id)])
       selectChat(activeChat.id, { serverId: createdId || serverChatId })
-      if (createdId) setServerChatId(createdId)
     }
 
     const timestamp = new Date()
@@ -657,13 +641,12 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       setChats((prevChats) =>
         prevChats.map((chat) => {
           if (chat.id === (activeChat?.id ?? currentChatId)) {
-            const nextTitle = isFirstMessage ? placeholderTitle(question) : chat.title
             return {
               ...chat,
               messages: updatedMessages,
-              title: nextTitle,
+              title: chat.title,
               titleStatus: isFirstMessage ? "pending" : chat.titleStatus || "ready",
-              pendingTitle: isFirstMessage ? undefined : chat.pendingTitle,
+              pendingTitle: isFirstMessage ? placeholderTitle(question) : chat.pendingTitle,
             }
           }
           return chat
@@ -912,7 +895,9 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}>
             <Menu className="h-5 w-5" />
           </Button>
-          <h1 className="flex-1 truncate font-semibold text-foreground">{currentChat?.title || "New Chat"}</h1>
+          <h1 className="flex-1 truncate font-semibold text-foreground">
+            {currentChat?.pendingTitle || currentChat?.title || "New Chat"}
+          </h1>
           <ThemeToggle />
         </header>
 
@@ -976,6 +961,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
                     RAG={RAG}
                     isTyping={isTyping}
                     onCancel={handleCancel}
+                    focusSignal={heroInputFocusSignal}
                     onToggleWorkflow={(name, value) => {
                       if (name === "radmapping") {
                         setRadmapping(value)
