@@ -53,6 +53,11 @@ const truncateLabel = (label: string | number, maxLength = 12) => {
   return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label
 }
 
+const truncateText = (text: string | undefined, maxLength = 80) => {
+  if (!text) return text
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text
+}
+
 const wrapText = (text: string | undefined, maxChars = 16, maxLines = 2) => {
   if (!text) return [] as string[]
 
@@ -221,8 +226,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       const anchor = showLeft ? "end" : "start"
       const color = payload.color || COLORS[index % COLORS.length]
       const labelLines = wrapText(payload.name, nodeLabelLimit, 2)
-      const descriptionLines = wrapText(payload.description, nodeLabelLimit + 6, 2)
-      const totalLines = labelLines.length + descriptionLines.length
+      const totalLines = labelLines.length
       const lineHeight = 12
       const startY = y + height / 2 - ((totalLines - 1) * lineHeight) / 2
       return (
@@ -243,17 +247,6 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
             <text x={labelX} y={startY} textAnchor={anchor} className="fill-foreground" style={{ fontSize: 11 }}>
               {labelLines.map((line: string, idx: number) => (
                 <tspan key={`${payload.id}-label-${idx}`} x={labelX} dy={idx === 0 ? 0 : lineHeight} className="font-medium">
-                  {line}
-                </tspan>
-              ))}
-              {descriptionLines.map((line: string, idx: number) => (
-                <tspan
-                  key={`${payload.id}-desc-${idx}`}
-                  x={labelX}
-                  dy={lineHeight}
-                  className="fill-muted-foreground"
-                  style={{ fontSize: 10 }}
-                >
                   {line}
                 </tspan>
               ))}
@@ -324,13 +317,15 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
         >
           {title && <div className="mb-1 text-[11px] font-semibold text-foreground">{title}</div>}
           {isNode ? (
-            data.description && <div className="text-[11px] text-muted-foreground">{data.description}</div>
+            data.description && (
+              <div className="text-[11px] text-muted-foreground">{truncateText(data.description, 96)}</div>
+            )
           ) : (
             <div className="space-y-1">
               {linkDescriptions.map((item) => (
                 <div key={item?.label} className="text-[11px]">
                   <div className="font-medium text-foreground">{item?.label}</div>
-                  <div className="text-muted-foreground">{item?.description}</div>
+                  <div className="text-muted-foreground">{truncateText(item?.description as string, 96)}</div>
                 </div>
               ))}
             </div>
