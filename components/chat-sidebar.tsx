@@ -55,6 +55,58 @@ function searchInChat(chat: Chat, query: string): { matches: boolean; snippet?: 
   return { matches: false }
 }
 
+function useTypewriterTitle(title: string, pendingTitle?: string, status?: Chat["titleStatus"]) {
+  const [display, setDisplay] = useState(title)
+  const [animating, setAnimating] = useState(false)
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    if (status === "pending") {
+      setAnimating(false)
+      setDisplay(title)
+    } else if (status === "streaming" && pendingTitle) {
+      setAnimating(true)
+      setDisplay(title)
+      timer = setTimeout(() => {
+        setDisplay("")
+        let idx = 0
+        interval = setInterval(() => {
+          idx += 1
+          setDisplay(pendingTitle.slice(0, idx))
+          if (idx >= pendingTitle.length) {
+            if (interval) clearInterval(interval)
+            setAnimating(false)
+          }
+        }, 35)
+      }, 120)
+    } else {
+      setAnimating(false)
+      setDisplay(title)
+    }
+
+    return () => {
+      if (timer) clearTimeout(timer)
+      if (interval) clearInterval(interval)
+    }
+  }, [pendingTitle, status, title])
+
+  return { display, animating }
+}
+
+function ChatSidebarTitle({ chat }: { chat: Chat }) {
+  const { display, animating } = useTypewriterTitle(chat.title, chat.pendingTitle, chat.titleStatus)
+  const showCursor = chat.titleStatus === "pending" || chat.titleStatus === "streaming"
+
+  return (
+    <span className={cn("block truncate text-sidebar-foreground", animating && "animate-pulse")}>
+      {display || chat.pendingTitle || chat.title}
+      {showCursor ? <span className="ml-0.5 inline-block animate-pulse">▍</span> : null}
+    </span>
+  )
+}
+
 export function ChatSidebar({
   chats,
   currentChatId,
@@ -177,7 +229,7 @@ export function ChatSidebar({
                           >
                             <div className="min-w-0 flex-1">
                               <div className="min-w-0">
-                                <span className="block truncate text-sidebar-foreground">{chat.title}</span>
+                                <ChatSidebarTitle chat={chat} />
                               </div>
                               {/* Preview removed per request */}
                             </div>

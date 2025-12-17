@@ -71,10 +71,9 @@ export async function POST(req: Request) {
     // Create or retrieve chat row (scoped by user)
     let effectiveChatId = chatId
     if (!effectiveChatId) {
-      const title = question.length > 30 ? question.slice(0, 30) + "..." : question
       const { data: chatInsert, error: chatErr } = await supabase
         .from('chats')
-        .insert({ user_id: user.id, user_email: user.email, title })
+        .insert({ user_id: user.id, user_email: user.email, title: 'New Chat' })
         .select('id')
         .single()
       if (chatErr) {
@@ -82,26 +81,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Failed to create chat" }, { status: 500 })
       }
       effectiveChatId = chatInsert.id as string
-    }
-
-    // Ensure chat title is updated from default on first message
-    try {
-      const { data: chatRow } = await supabase
-        .from('chats')
-        .select('id, title')
-        .eq('id', effectiveChatId)
-        .eq('user_email', user.email)
-        .single()
-      const desiredTitle = question.length > 30 ? question.slice(0, 30) + '...' : question
-      if (chatRow && (!chatRow.title || chatRow.title === 'New Chat')) {
-        await supabase
-          .from('chats')
-          .update({ title: desiredTitle })
-          .eq('id', effectiveChatId)
-          .eq('user_email', user.email)
-      }
-    } catch (e) {
-      // non-fatal
     }
 
     // Insert user message

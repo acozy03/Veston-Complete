@@ -30,12 +30,16 @@ export type Message = {
   visuals?: ChartSpec[]
 }
 
+type TitleStatus = "ready" | "pending" | "streaming"
+
 export type Chat = {
   id: string
   title: string
   messages: Message[]
   createdAt: Date
   preview?: string
+  titleStatus?: TitleStatus
+  pendingTitle?: string
 }
 
 const generateId = () =>
@@ -44,6 +48,14 @@ const generateId = () =>
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`
 
 const INITIAL_CHATS: Chat[] = []
+
+const placeholderTitle = (content: string) => {
+  if (content && content.trim()) {
+    const trimmed = content.trim()
+    return trimmed.length > 30 ? `${trimmed.slice(0, 30)}...` : trimmed
+  }
+  return "New Chat"
+}
 
 const classifyVisualizationNeed = async (question: string) => {
   try {
@@ -108,13 +120,15 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const searchParams = useSearchParams()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [chats, setChats] = useState<Chat[]>(
-    initialChatId && initialMessages.length
-      ? initialChats.map((c) => (c.id === initialChatId ? { ...c, messages: initialMessages } : c))
-      : initialChats.length
-        ? initialChats
-        : INITIAL_CHATS,
-  )
+  const [chats, setChats] = useState<Chat[]>(() => {
+    const base =
+      initialChatId && initialMessages.length
+        ? initialChats.map((c) => (c.id === initialChatId ? { ...c, messages: initialMessages } : c))
+        : initialChats.length
+          ? initialChats
+          : INITIAL_CHATS
+    return base.map((chat) => ({ ...chat, titleStatus: chat.titleStatus || "ready" }))
+  })
   const [currentChatId, setCurrentChatId] = useState<string>(initialChatId || "")
   const [isTyping, setIsTyping] = useState(false)
   const [typingChatId, setTypingChatId] = useState<string | null>(null)
@@ -144,6 +158,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   ] as const
   const [heroTitle, setHeroTitle] = useState<string>("")
   const newlyCreatedChatIds = useRef<Set<string>>(new Set())
+  const pendingTitleRequests = useRef<Set<string>>(new Set())
   const storageKey = useMemo(() => `activeChat:${userEmail || "anon"}`, [userEmail])
 
   const persistActiveChatId = (chatId: string | null) => {
@@ -168,6 +183,54 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       const target = `${pathname}${query ? `?${query}` : ""}`
       router.replace(target, { scroll: false })
     } catch {}
+  }
+
+  const updateChatTitleState = (
+    chatId: string,
+    updates: Partial<Pick<Chat, "title" | "titleStatus" | "pendingTitle">>,
+  ) => {
+    setChats((prevChats) => prevChats.map((chat) => (chat.id === chatId ? { ...chat, ...updates } : chat)))
+  }
+
+  const triggerTitleGeneration = async (
+    chatId: string,
+    message: string,
+    placeholder: string,
+    serverChatId?: string,
+  ) => {
+    if (!chatId || pendingTitleRequests.current.has(chatId)) return
+    pendingTitleRequests.current.add(chatId)
+    updateChatTitleState(chatId, { title: placeholder, titleStatus: "pending", pendingTitle: undefined })
+
+    try {
+      const res = await fetch("/api/chat/title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, fallback: placeholder }),
+      })
+      const parsed = (await res.json().catch(() => ({}))) as { title?: string | null }
+      const generatedTitle = typeof parsed?.title === "string" && parsed.title.trim() ? parsed.title.trim() : placeholder
+
+      updateChatTitleState(chatId, { titleStatus: "streaming", pendingTitle: generatedTitle })
+
+      if (serverChatId) {
+        void supabase
+          .from("chats")
+          .update({ title: generatedTitle })
+          .eq("id", serverChatId)
+          .eq("user_email", userEmail || "")
+      }
+
+      const duration = Math.min(2400, Math.max(800, generatedTitle.length * 40))
+      setTimeout(() => {
+        updateChatTitleState(chatId, { title: generatedTitle, titleStatus: "ready", pendingTitle: undefined })
+      }, duration)
+    } catch (error) {
+      console.warn("[chat:title] generation failed", error)
+      updateChatTitleState(chatId, { titleStatus: undefined, pendingTitle: undefined })
+    } finally {
+      pendingTitleRequests.current.delete(chatId)
+    }
   }
 
   const selectChat = (chatId: string, options?: { serverId?: string }) => {
@@ -206,6 +269,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           title: (c.title as string) || "New Chat",
           messages: [],
           createdAt: new Date(c.created_at as string),
+          titleStatus: "ready" as const,
         }))
         setChats(mapped)
         // Load a short preview (last message) for each chat to enable search/snippets
@@ -522,6 +586,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         title: "New Chat",
         messages: [],
         createdAt: new Date(),
+        titleStatus: "ready",
       }
       newlyCreatedChatIds.current.add(local.id)
       setChats([local, ...chats])
@@ -534,6 +599,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       title: (data.title as string) || "New Chat",
       messages: [],
       createdAt: new Date(data.created_at as string),
+      titleStatus: "ready",
     }
     newlyCreatedChatIds.current.add(created.id)
     setChats((prev) => [created, ...prev])
@@ -561,6 +627,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         title: (data?.title as string) || "New Chat",
         messages: [],
         createdAt: new Date((data?.created_at as string) || Date.now()),
+        titleStatus: "ready",
       }
       newlyCreatedChatIds.current.add(activeChat.id)
       setChats([activeChat, ...chats])
@@ -578,34 +645,36 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
     // Prevent accidental consecutive duplicate sends of the same content
     const last = activeChat?.messages?.[activeChat.messages.length - 1]
+    let isFirstMessage = false
+
     if (last && last.role === "user" && (last.content || "").trim() === question.trim()) {
       // If the previous message is identical, skip adding another local copy
       // The server will still process the existing one
     } else {
       const updatedMessages = [...(activeChat?.messages ?? []), userMessage]
 
+      isFirstMessage = (activeChat?.messages?.length || 0) === 0
       setChats((prevChats) =>
         prevChats.map((chat) => {
           if (chat.id === (activeChat?.id ?? currentChatId)) {
-            const isFirst = chat.messages.length === 0
-            const nextTitle = isFirst ? question.slice(0, 30) + (question.length > 30 ? "..." : "") : chat.title
-            // Persist title on first message
-            if (isFirst) {
-              void supabase
-                .from("chats")
-                .update({ title: nextTitle })
-                .eq("id", chat.id)
-                .eq("user_email", userEmail || "")
-            }
+            const nextTitle = isFirstMessage ? placeholderTitle(question) : chat.title
             return {
               ...chat,
               messages: updatedMessages,
               title: nextTitle,
+              titleStatus: isFirstMessage ? "pending" : chat.titleStatus || "ready",
+              pendingTitle: isFirstMessage ? undefined : chat.pendingTitle,
             }
           }
           return chat
         }),
       )
+    }
+
+    const targetChatId = activeChat?.id || currentChatId || ""
+    if (isFirstMessage && targetChatId) {
+      const serverIdForTitle = requestChatId || serverChatId || undefined
+      triggerTitleGeneration(targetChatId, question, placeholderTitle(question), serverIdForTitle)
     }
 
     const pendingChatId = activeChat?.id || currentChatId || null
