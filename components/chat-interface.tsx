@@ -328,9 +328,16 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     } catch {}
 
     const knownChatIds = new Set(chats.map((chat) => chat.id))
-    const preferredChatId = [urlChatId, initialChatId, storedChatId].find(
-      (id) => id && knownChatIds.has(id),
-    )
+    if (currentChatId && knownChatIds.has(currentChatId) && newlyCreatedChatIds.current.has(currentChatId)) {
+      return
+    }
+
+    const preferredChatId =
+      (urlChatId && knownChatIds.has(urlChatId) && urlChatId) ||
+      (currentChatId && knownChatIds.has(currentChatId) && currentChatId) ||
+      (initialChatId && knownChatIds.has(initialChatId) && initialChatId) ||
+      (storedChatId && knownChatIds.has(storedChatId) && storedChatId) ||
+      undefined
     if (preferredChatId && preferredChatId !== currentChatId) {
       setCurrentChatId(preferredChatId)
       if (!serverChatId && preferredChatId === initialChatId) {
