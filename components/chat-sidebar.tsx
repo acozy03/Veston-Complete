@@ -223,62 +223,61 @@ export function ChatSidebar({
                   ) : (
                     displayChats.map(({ chat }) => (
                       <Tooltip key={chat.id}>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => onSelectChat(chat.id)}
-                            className={cn(
-                              "flex w-[14.5rem] items-center rounded-lg px-2 pr-2 py-2 text-left text-sm transition-colors hover:bg-sidebar-accent",
-                              currentChatId === chat.id && "bg-sidebar-accent",
-                            )}
-                          >
-                            <div className="min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => onSelectChat(chat.id)}
+                          className={cn(
+                            "flex w-[14.5rem] items-center rounded-lg px-2 pr-2 py-2 text-left text-sm transition-colors hover:bg-sidebar-accent",
+                            currentChatId === chat.id && "bg-sidebar-accent",
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <TooltipTrigger asChild>
                               <div className="min-w-0">
                                 <ChatSidebarTitle chat={chat} />
                               </div>
-                              {/* Preview removed per request */}
-                            </div>
-                            <div className="ml-1 shrink-0">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    asChild
-                                    variant="ghost"
-                                    size="icon"
-                                    aria-label="Chat actions"
-                                    className="h-5 w-5 rounded-md p-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-transparent"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <span className="flex items-center justify-center">
-                                      <MoreHorizontal className="h-4 w-4" />
-                                    </span>
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" sideOffset={6} onClick={(e) => e.stopPropagation()}>
-                                  <DropdownMenuItem
-                                    className="focus:text-red-500"
-                                    onClick={(e) => {
-                                      e.preventDefault()
-                                      e.stopPropagation()
-                                      setPendingDeleteId(chat.id)
-                                      setConfirmOpen(true)
-                                    }}
-                                  >
-                                    Delete chat
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </button>
-                        </TooltipTrigger>
+                            </TooltipTrigger>
+                            {/* Preview removed per request */}
+                          </div>
+                          <div className="ml-1 shrink-0">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  asChild
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="Chat actions"
+                                  className="h-5 w-5 rounded-md p-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-transparent"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <span className="flex items-center justify-center">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" sideOffset={6} onClick={(e) => e.stopPropagation()}>
+                                <DropdownMenuItem
+                                  className="focus:text-red-500"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    setPendingDeleteId(chat.id)
+                                    setConfirmOpen(true)
+                                  }}
+                                >
+                                  Delete chat
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </button>
                         <TooltipContent
-  side="right"
-  align="start"
-  className="max-w-none whitespace-normal"
->
-  {chat.title}
-</TooltipContent>
-
+                          side="right"
+                          align="start"
+                          className="max-w-none whitespace-normal"
+                        >
+                          {chat.title}
+                        </TooltipContent>
                       </Tooltip>
                     ))
                   )}
