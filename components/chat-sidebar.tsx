@@ -97,12 +97,12 @@ function useTypewriterTitle(title: string, pendingTitle?: string, status?: Chat[
 
 function ChatSidebarTitle({ chat }: { chat: Chat }) {
   const { display, animating } = useTypewriterTitle(chat.title, chat.pendingTitle, chat.titleStatus)
-  const showCursor = chat.titleStatus === "pending" || chat.titleStatus === "streaming"
+  const isStreaming = chat.titleStatus === "streaming"
+  const titleText = animating || isStreaming ? display : display || chat.pendingTitle || chat.title
 
   return (
     <span className={cn("block truncate text-sidebar-foreground", animating && "animate-pulse")}>
-      {display || chat.pendingTitle || chat.title}
-      {showCursor ? <span className="ml-0.5 inline-block animate-pulse">▍</span> : null}
+      {titleText}
     </span>
   )
 }
