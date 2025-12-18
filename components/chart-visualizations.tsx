@@ -350,57 +350,59 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
           />
         </ResponsiveContainer>
         {renderSankeyTooltip()}
-        <Dialog open={!!selectedSankeyItem} onOpenChange={(open) => !open && setSelectedSankeyItem(null)}>
-          <DialogContent>
-            <DialogHeader>
-              {selectedSankeyItem?.type === "node" ? (
-                <>
-                  <DialogTitle>
-                    {selectedSankeyItem?.data?.name || selectedSankeyItem?.data?.id || "Node details"}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {selectedSankeyItem?.data?.description || "No description available for this node."}
-                  </DialogDescription>
-                </>
-              ) : (
-                <>
-                  <DialogTitle>
-                    {[
-                      resolveNodeLabel(selectedSankeyItem?.data?.source),
-                      resolveNodeLabel(selectedSankeyItem?.data?.target),
-                    ]
-                      .filter(Boolean)
-                      .join(" → ") || "Link details"}
-                  </DialogTitle>
-                  <DialogDescription>
-                    <div className="space-y-1 text-foreground">
-                      {resolveNode(selectedSankeyItem?.data?.source)?.description && (
-                        <div>
-                          <div className="font-medium">{resolveNodeLabel(selectedSankeyItem?.data?.source)}</div>
-                          <div className="text-muted-foreground">
-                            {resolveNode(selectedSankeyItem?.data?.source)?.description}
+        {selectedSankeyItem && (
+          <Dialog open onOpenChange={(open) => !open && setSelectedSankeyItem(null)}>
+            <DialogContent>
+              <DialogHeader>
+                {selectedSankeyItem?.type === "node" ? (
+                  <>
+                    <DialogTitle>
+                      {selectedSankeyItem?.data?.name || selectedSankeyItem?.data?.id || "Node details"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {selectedSankeyItem?.data?.description || "No description available for this node."}
+                    </DialogDescription>
+                  </>
+                ) : (
+                  <>
+                    <DialogTitle>
+                      {[
+                        resolveNodeLabel(selectedSankeyItem?.data?.source),
+                        resolveNodeLabel(selectedSankeyItem?.data?.target),
+                      ]
+                        .filter(Boolean)
+                        .join(" → ") || "Link details"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      <div className="space-y-1 text-foreground">
+                        {resolveNode(selectedSankeyItem?.data?.source)?.description && (
+                          <div>
+                            <div className="font-medium">{resolveNodeLabel(selectedSankeyItem?.data?.source)}</div>
+                            <div className="text-muted-foreground">
+                              {resolveNode(selectedSankeyItem?.data?.source)?.description}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                      {resolveNode(selectedSankeyItem?.data?.target)?.description && (
-                        <div>
-                          <div className="font-medium">{resolveNodeLabel(selectedSankeyItem?.data?.target)}</div>
-                          <div className="text-muted-foreground">
-                            {resolveNode(selectedSankeyItem?.data?.target)?.description}
-                          </div>
-                        </div>
-                      )}
-                      {!resolveNode(selectedSankeyItem?.data?.source)?.description &&
-                        !resolveNode(selectedSankeyItem?.data?.target)?.description && (
-                          <div className="text-muted-foreground">No details available for this link.</div>
                         )}
-                    </div>
-                  </DialogDescription>
-                </>
-              )}
-            </DialogHeader>
-          </DialogContent>
-        </Dialog>
+                        {resolveNode(selectedSankeyItem?.data?.target)?.description && (
+                          <div>
+                            <div className="font-medium">{resolveNodeLabel(selectedSankeyItem?.data?.target)}</div>
+                            <div className="text-muted-foreground">
+                              {resolveNode(selectedSankeyItem?.data?.target)?.description}
+                            </div>
+                          </div>
+                        )}
+                        {!resolveNode(selectedSankeyItem?.data?.source)?.description &&
+                          !resolveNode(selectedSankeyItem?.data?.target)?.description && (
+                            <div className="text-muted-foreground">No details available for this link.</div>
+                          )}
+                      </div>
+                    </DialogDescription>
+                  </>
+                )}
+              </DialogHeader>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     )
   }
