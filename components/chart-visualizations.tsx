@@ -352,20 +352,20 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
         {renderSankeyTooltip()}
         {selectedSankeyItem && (
           <Dialog open onOpenChange={(open) => !open && setSelectedSankeyItem(null)}>
-            <DialogContent>
+            <DialogContent className="max-h-[80vh] max-w-2xl overflow-auto sm:max-w-3xl">
               <DialogHeader>
                 {selectedSankeyItem?.type === "node" ? (
                   <>
-                    <DialogTitle>
+                    <DialogTitle className="break-words whitespace-pre-wrap text-wrap">
                       {selectedSankeyItem?.data?.name || selectedSankeyItem?.data?.id || "Node details"}
                     </DialogTitle>
-                    <DialogDescription>
+                    <DialogDescription className="break-words whitespace-pre-wrap text-wrap">
                       {selectedSankeyItem?.data?.description || "No description available for this node."}
                     </DialogDescription>
                   </>
                 ) : (
                   <>
-                    <DialogTitle>
+                    <DialogTitle className="break-words whitespace-pre-wrap text-wrap">
                       {[
                         resolveNodeLabel(selectedSankeyItem?.data?.source),
                         resolveNodeLabel(selectedSankeyItem?.data?.target),
@@ -373,27 +373,35 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
                         .filter(Boolean)
                         .join(" → ") || "Link details"}
                     </DialogTitle>
-                    <DialogDescription>
-                      <div className="space-y-1 text-foreground">
+                    <DialogDescription
+                      className="break-words whitespace-pre-wrap text-wrap"
+                    >
+                      <div className="space-y-2 text-foreground">
                         {resolveNode(selectedSankeyItem?.data?.source)?.description && (
-                          <div>
-                            <div className="font-medium">{resolveNodeLabel(selectedSankeyItem?.data?.source)}</div>
-                            <div className="text-muted-foreground">
+                          <div className="space-y-1 break-words whitespace-pre-wrap text-wrap">
+                            <div className="font-medium break-words whitespace-pre-wrap text-wrap">
+                              {resolveNodeLabel(selectedSankeyItem?.data?.source)}
+                            </div>
+                            <div className="text-muted-foreground break-words whitespace-pre-wrap text-wrap">
                               {resolveNode(selectedSankeyItem?.data?.source)?.description}
                             </div>
                           </div>
                         )}
                         {resolveNode(selectedSankeyItem?.data?.target)?.description && (
-                          <div>
-                            <div className="font-medium">{resolveNodeLabel(selectedSankeyItem?.data?.target)}</div>
-                            <div className="text-muted-foreground">
+                          <div className="space-y-1 break-words whitespace-pre-wrap text-wrap">
+                            <div className="font-medium break-words whitespace-pre-wrap text-wrap">
+                              {resolveNodeLabel(selectedSankeyItem?.data?.target)}
+                            </div>
+                            <div className="text-muted-foreground break-words whitespace-pre-wrap text-wrap">
                               {resolveNode(selectedSankeyItem?.data?.target)?.description}
                             </div>
                           </div>
                         )}
                         {!resolveNode(selectedSankeyItem?.data?.source)?.description &&
                           !resolveNode(selectedSankeyItem?.data?.target)?.description && (
-                            <div className="text-muted-foreground">No details available for this link.</div>
+                            <div className="text-muted-foreground break-words whitespace-pre-wrap text-wrap">
+                              No details available for this link.
+                            </div>
                           )}
                       </div>
                     </DialogDescription>
