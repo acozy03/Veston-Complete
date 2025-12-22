@@ -183,7 +183,7 @@ export function ChatInput({
               // non-hero: explicitly 40px tall so it matches BASE_ICON
               "h-11 min-h-0 rounded-md px-3 py-2 leading-6",
               // hero: 56px tall + visually centered single-line text
-              hero && `${HERO_H} min-h-0 ${HERO_RADIUS} px-4 py-0 text-base leading-[3.5rem]`,
+              hero && `${HERO_H} min-h-0 ${HERO_RADIUS} px-4 py-3 text-base leading-6`,
             )}
           />
 
