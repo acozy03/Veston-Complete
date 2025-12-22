@@ -138,6 +138,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const [mode, setMode] = useState<"fast" | "slow">("fast")
   const [radmapping, setRadmapping] = useState<boolean>(false)
   const [RAG, setDataRetrieval] = useState<boolean>(false)
+  const [studyAnalysis, setStudyAnalysis] = useState<boolean>(false)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
   const [loadingChatId, setLoadingChatId] = useState<string | null>(null)
 
@@ -705,8 +706,10 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         radmapping,
         // Data Analysis / RAG
         RAG,
+        // Study Analysis workflow
+        studyAnalysis,
         // Explicit default-case flag for classifier routing
-        noWorkflow: !radmapping && !RAG,
+        noWorkflow: !radmapping && !RAG && !studyAnalysis,
       }
       // Client-side debug log for visibility in devtools
       try { console.log("POST /api/chat payload", payload) } catch {}
@@ -942,16 +945,21 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
               onChangeMode={setMode}
               radmapping={radmapping}
               RAG={RAG}
+              studyAnalysis={studyAnalysis}
               isTyping={isTyping}
               onCancel={handleCancel}
               onToggleWorkflow={(name, value) => {
                 if (name === "radmapping") {
                   setRadmapping(value)
-                  if (value) { setDataRetrieval(false) }
+                  if (value) { setDataRetrieval(false); setStudyAnalysis(false) }
                 }
                 if (name === "RAG") {
                   setDataRetrieval(value)
-                  if (value) { setRadmapping(false) }
+                  if (value) { setRadmapping(false); setStudyAnalysis(false) }
+                }
+                if (name === "studyAnalysis") {
+                  setStudyAnalysis(value)
+                  if (value) { setRadmapping(false); setDataRetrieval(false) }
                 }
               }}
             />
@@ -985,17 +993,22 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
                     onChangeMode={setMode}
                     radmapping={radmapping}
                     RAG={RAG}
+                    studyAnalysis={studyAnalysis}
                     isTyping={isTyping}
                     onCancel={handleCancel}
                     focusSignal={heroInputFocusSignal}
                     onToggleWorkflow={(name, value) => {
                       if (name === "radmapping") {
                         setRadmapping(value)
-                        if (value) { setDataRetrieval(false) }
+                        if (value) { setDataRetrieval(false); setStudyAnalysis(false) }
                       }
                       if (name === "RAG") {
                         setDataRetrieval(value)
-                        if (value) { setRadmapping(false) }
+                        if (value) { setRadmapping(false); setStudyAnalysis(false) }
+                      }
+                      if (name === "studyAnalysis") {
+                        setStudyAnalysis(value)
+                        if (value) { setRadmapping(false); setDataRetrieval(false) }
                       }
                     }}
                   />

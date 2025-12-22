@@ -22,9 +22,10 @@ interface ChatInputProps {
   onChangeMode: (mode: "fast" | "slow") => void
   radmapping: boolean
   RAG: boolean
+  studyAnalysis: boolean
   isTyping: boolean
   onCancel: () => void
-  onToggleWorkflow: (name: "radmapping" | "RAG", value: boolean) => void
+  onToggleWorkflow: (name: "radmapping" | "RAG" | "studyAnalysis", value: boolean) => void
   hero?: boolean
   placeholder?: string
   focusSignal?: number
@@ -36,6 +37,7 @@ export function ChatInput({
   onChangeMode,
   radmapping,
   RAG,
+  studyAnalysis,
   isTyping,
   onCancel,
   onToggleWorkflow,
@@ -155,6 +157,16 @@ export function ChatInput({
                 >
                   Data Analysis
                 </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    onToggleWorkflow("studyAnalysis", !studyAnalysis)
+                  }}
+                  className={cn("cursor-pointer", studyAnalysis && "bg-accent text-accent-foreground")}
+                >
+                  Study Analysis
+                </DropdownMenuItem>
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -205,13 +217,19 @@ export function ChatInput({
           )}
         </div>
 
-        {!hero && (
-          <p className="mt-2 text-center text-xs text-muted-foreground/80">
-            {mode === "slow" ? "High (Slow)" : "Low (Fast)"}
-            {" • "}
-            {RAG ? "Data Analysis" : radmapping ? "RadMapping+" : "Workflow: None"}
-          </p>
-        )}
+          {!hero && (
+            <p className="mt-2 text-center text-xs text-muted-foreground/80">
+              {mode === "slow" ? "High (Slow)" : "Low (Fast)"}
+              {" • "}
+              {RAG
+                ? "Data Analysis"
+                : radmapping
+                  ? "RadMapping+"
+                  : studyAnalysis
+                    ? "Study Analysis"
+                    : "Workflow: None"}
+            </p>
+          )}
       </div>
     </div>
   )

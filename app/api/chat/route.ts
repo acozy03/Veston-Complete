@@ -29,6 +29,7 @@ export async function POST(req: Request) {
       mode,
       radmapping,
       RAG,
+      studyAnalysis,
       noWorkflow,
     }: {
       question?: string
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
       mode?: "fast" | "slow" | string
       radmapping?: boolean
       RAG?: boolean
+      studyAnalysis?: boolean
       noWorkflow?: boolean
     } = await req.json()
 
@@ -51,6 +53,7 @@ export async function POST(req: Request) {
         slow: slow === true,
         radmapping: radmapping === true,
         RAG: RAG === true,
+        studyAnalysis: studyAnalysis === true,
         noWorkflow: noWorkflow === true,
         questionPreview: preview,
       })
@@ -115,6 +118,7 @@ export async function POST(req: Request) {
         slow: slow === true,
         radmapping: radmapping === true,
         RAG: RAG === true,
+        studyAnalysis: studyAnalysis === true,
         noWorkflow: noWorkflow === true,
         // helpful context
         chatId: effectiveChatId,
