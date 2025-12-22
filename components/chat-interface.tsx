@@ -28,6 +28,7 @@ export type Message = {
   timestamp: Date
   sources?: Source[]
   visuals?: ChartSpec[]
+  visualStatus?: "pending" | "ready" | "error"
 }
 
 type TitleStatus = "ready" | "pending" | "streaming"
@@ -108,6 +109,20 @@ const generateVisualizations = async (params: { question: string; answer: string
   }
 }
 
+const persistVisualizations = async (params: { chatId?: string; messageId?: string; charts?: ChartSpec[] }) => {
+  const { chatId, messageId, charts } = params
+  if (!chatId || !messageId || !charts?.length) return
+  try {
+    await fetch("/api/visuals/store", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatId, messageId, visualizations: charts }),
+    })
+  } catch (error) {
+    console.warn("[visuals] store:failed", error)
+  }
+}
+
 type ChatInterfaceProps = {
   initialChats?: Chat[]
   initialChatId?: string
@@ -163,6 +178,73 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const storageKey = useMemo(() => `activeChat:${userEmail || "anon"}`, [userEmail])
   const [forceHeroMode, setForceHeroMode] = useState(false)
   const [heroInputFocusSignal, setHeroInputFocusSignal] = useState(0)
+  const visualizationPolls = useRef<Map<string, NodeJS.Timeout>>(new Map())
+
+  const updateMessageState = (
+    chatId: string,
+    messageId: string,
+    updater: (msg: Message) => Message,
+  ) => {
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === chatId
+          ? { ...chat, messages: chat.messages.map((m) => (m.id === messageId ? updater(m) : m)) }
+          : chat,
+      ),
+    )
+  }
+
+  const stopVisualizationPolling = (chatId?: string, messageId?: string) => {
+    if (!chatId || !messageId) return
+    const key = `${chatId}:${messageId}`
+    const handle = visualizationPolls.current.get(key)
+    if (handle) {
+      clearInterval(handle)
+      visualizationPolls.current.delete(key)
+    }
+  }
+
+  const startVisualizationPolling = (chatId?: string, messageId?: string) => {
+    if (!chatId || !messageId) return
+    const key = `${chatId}:${messageId}`
+    if (visualizationPolls.current.has(key)) return
+    let attempts = 0
+
+    const poll = async () => {
+      attempts += 1
+      try {
+        const { data, error } = await supabase
+          .from("message_visualizations")
+          .select("visualizations")
+          .eq("chat_id", chatId)
+          .eq("message_id", messageId)
+          .eq("user_email", userEmail || "")
+          .maybeSingle()
+
+        if (!error && data?.visualizations) {
+          const prepared = prepareChartSpecs((data as any).visualizations)
+          updateMessageState(chatId, messageId, (msg) => ({
+            ...msg,
+            visuals: prepared,
+            visualStatus: prepared.length > 0 ? "ready" : msg.visualStatus,
+          }))
+          stopVisualizationPolling(chatId, messageId)
+          return
+        }
+      } catch (error) {
+        console.warn("[visuals] poll failed", error)
+      }
+
+      if (attempts >= 10) {
+        updateMessageState(chatId, messageId, (msg) => ({ ...msg, visualStatus: msg.visualStatus || "error" }))
+        stopVisualizationPolling(chatId, messageId)
+      }
+    }
+
+    const handle = setInterval(poll, 4000)
+    visualizationPolls.current.set(key, handle)
+    void poll()
+  }
 
   const persistActiveChatId = (chatId: string | null) => {
     try {
@@ -379,6 +461,14 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     } catch {}
   }, [mode])
 
+  useEffect(
+    () => () => {
+      visualizationPolls.current.forEach((handle) => clearInterval(handle))
+      visualizationPolls.current.clear()
+    },
+    [],
+  )
+
   const loadPreviews = async (items: Chat[]) => {
     await Promise.all(
       items.map(async (c) => {
@@ -469,6 +559,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       timestamp: new Date(m.created_at as string),
       sources: sourcesByMessage[String(m.id)] || undefined,
       visuals: visualsByMessage[String(m.id)] || undefined,
+      visualStatus: visualsByMessage[String(m.id)]?.length ? "ready" : undefined,
     }))
     if (msgs.length > 0) {
       newlyCreatedChatIds.current.delete(chatId)
@@ -489,7 +580,10 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
               (m.visuals?.length || 0) > 0,
           )
           if (existing?.visuals?.length) {
-            return { ...msg, visuals: existing.visuals }
+            return { ...msg, visuals: existing.visuals, visualStatus: existing.visualStatus || msg.visualStatus }
+          }
+          if (existing?.visualStatus) {
+            return { ...msg, visualStatus: existing.visualStatus }
           }
           return msg
         })
@@ -751,14 +845,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         : undefined
       const serverCharts = extractChartsFromPayload(parsed)
       const rawPayload = typeof parsed === "object" && parsed !== null ? (parsed as any).raw : undefined
-      let charts = serverCharts
 
-      const shouldVisualize = await visualizationPromise.catch(() => false)
-      if (shouldVisualize && charts.length === 0) {
-        charts = await generateVisualizations({ question, answer: replyText, raw: rawPayload })
-      }
-
-      // Extract optional sources array from the response
       const sources: Source[] | undefined =
         typeof parsed === "object" && parsed !== null && Array.isArray((parsed as any).sources)
           ? (parsed as any).sources
@@ -771,18 +858,21 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
               .filter((s: any) => typeof s.url === "string" && !!s.url)
           : undefined
 
+      const assistantMessageId = serverAssistantId || generateId()
       const assistantMessage: Message = {
-        id: serverAssistantId || generateId(),
+        id: assistantMessageId,
         role: "assistant",
         content: replyText,
         timestamp: new Date(),
         sources,
-        visuals: charts.length > 0 ? charts : undefined,
+        visuals: serverCharts.length > 0 ? serverCharts : undefined,
+        visualStatus: serverCharts.length > 0 ? "ready" : undefined,
       }
 
+      const localChatId = activeChat?.id ?? currentChatId
       setChats((prevChats) =>
         prevChats.map((chat) =>
-          chat.id === (activeChat?.id ?? currentChatId)
+          chat.id === localChatId
             ? {
                 ...chat,
                 messages: [...chat.messages, assistantMessage],
@@ -812,23 +902,58 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           || serverChatId
           || requestChatId
           || activeChat?.id
+          || currentChatId
           || ""
 
-      if (charts.length > 0 && serverAssistantId && targetChatId) {
-        try {
-          await fetch("/api/visuals/store", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              chatId: targetChatId,
-              messageId: serverAssistantId,
-              visualizations: charts,
-            }),
-          })
-        } catch (error) {
-          console.warn("[visuals] store:failed", error)
-        }
+      const candidateChatIds = Array.from(
+        new Set([targetChatId, activeChat?.id, currentChatId].filter(Boolean) as string[]),
+      )
+
+      if (serverCharts.length > 0 && serverAssistantId && targetChatId) {
+        void persistVisualizations({ chatId: targetChatId, messageId: serverAssistantId, charts: serverCharts })
       }
+
+      const runVisualizationFlow = async () => {
+        const shouldVisualize = await visualizationPromise.catch(() => false)
+        if (!shouldVisualize) return
+
+        if (serverCharts.length > 0) {
+          candidateChatIds.forEach((chatId) =>
+            updateMessageState(chatId, assistantMessageId, (msg) => ({ ...msg, visualStatus: "ready" })),
+          )
+          return
+        }
+
+        candidateChatIds.forEach((chatId) =>
+          updateMessageState(chatId, assistantMessageId, (msg) => ({ ...msg, visualStatus: "pending" })),
+        )
+        startVisualizationPolling(targetChatId || candidateChatIds[0], assistantMessageId)
+
+        const charts = await generateVisualizations({ question, answer: replyText, raw: rawPayload })
+
+        if (charts.length > 0) {
+          candidateChatIds.forEach((chatId) =>
+            updateMessageState(chatId, assistantMessageId, (msg) => ({
+              ...msg,
+              visuals: charts,
+              visualStatus: "ready",
+            })),
+          )
+          stopVisualizationPolling(targetChatId || candidateChatIds[0], assistantMessageId)
+          void persistVisualizations({
+            chatId: targetChatId,
+            messageId: serverAssistantId || assistantMessageId,
+            charts,
+          })
+          return
+        }
+
+        candidateChatIds.forEach((chatId) =>
+          updateMessageState(chatId, assistantMessageId, (msg) => ({ ...msg, visualStatus: "error" })),
+        )
+      }
+
+      void runVisualizationFlow()
 
       // Reload messages from DB using the server chat id if available
       const idToLoad = (typeof parsed === "object" && parsed !== null && (parsed as any).chatId) || serverChatId

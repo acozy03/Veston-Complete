@@ -161,6 +161,18 @@ components={{
                       </div>
                     )}
 
+                    {message.visualStatus === "pending" && (!message.visuals || message.visuals.length === 0) && (
+                      <div className="mt-4 rounded-md border border-border/60 bg-background/80 p-3 text-sm text-muted-foreground">
+                        Generating chart visualization...
+                      </div>
+                    )}
+
+                    {message.visualStatus === "error" && (
+                      <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                        Charts are unavailable right now. The written answer above is still ready to use.
+                      </div>
+                    )}
+
                     {(message.timestamp || true) && (
                       <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground opacity-70">
                         <div>{message.timestamp ? formatTimestamp(message.timestamp) : ''}</div>
