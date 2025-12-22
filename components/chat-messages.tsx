@@ -8,6 +8,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Copy, Check } from "lucide-react"
 import { ChartVisualizations } from "./chart-visualizations"
+import { ChartVisualizationLoader } from "./chart-visualization-loader"
 
 interface ChatMessagesProps {
   messages: Message[]
@@ -162,14 +163,12 @@ components={{
                     )}
 
                     {message.visualStatus === "pending" && (!message.visuals || message.visuals.length === 0) && (
-                      <div className="mt-4 rounded-md border border-border/60 bg-background/80 p-3 text-sm text-muted-foreground">
-                        Generating chart visualization...
-                      </div>
+                      <ChartVisualizationLoader className="mt-4" />
                     )}
 
                     {message.visualStatus === "error" && (
                       <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-                        Charts are unavailable right now. The written answer above is still ready to use.
+                        Charts are unavailable right now.
                       </div>
                     )}
 
