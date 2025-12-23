@@ -135,10 +135,25 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       }
     | null
   >(null)
-  const computedWidth = Math.max(
-    categoriesCount * 80,
-    isPie ? 420 : isSankey ? Math.max(sankeyNodeCount * 180, 760) : 600,
-  )
+  const maxSankeyLabelLength = useMemo(() => {
+    if (!isSankey) return 0
+    return (hydrated.nodes || []).reduce((max, node) => Math.max(max, node.name?.length || 0), 0)
+  }, [hydrated.nodes, isSankey])
+
+  const baseChartWidth = categoriesCount * 80
+
+  const computedWidth = useMemo(() => {
+    if (isPie) return Math.max(baseChartWidth, 420)
+
+    if (isSankey) {
+      const labelCharacterWidth = 6
+      const maxLabelWidth = Math.min(maxSankeyLabelLength, 18) * labelCharacterWidth
+      const perNodeWidth = 160 + maxLabelWidth
+      return Math.max(baseChartWidth, sankeyNodeCount * perNodeWidth, 820)
+    }
+
+    return Math.max(baseChartWidth, 600)
+  }, [baseChartWidth, isPie, isSankey, maxSankeyLabelLength, sankeyNodeCount])
 
   const renderPieChart = () => {
     const categoryKey = hydrated.categoryKey || "label"

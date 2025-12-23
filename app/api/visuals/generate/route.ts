@@ -34,6 +34,7 @@ export async function POST(req: Request) {
                 "Sankey charts instead use nodes (array of {id,name,color,description}) and links (array of {source,target,value,color}) to describe flows.",
                 "When type is sankey, do not include data/xKey/yKeys/categoryKey/valueKey; provide only nodes and links.",
                 "Each sankey node needs a unique string id and name (with an optional description string shown with the label); every link must reference those ids exactly (never indexes or labels) and must include a numeric value.",
+                "For sankey nodes, include the most relevant timestamp or date from the case (e.g., admission time, procedure date) in the node name or description so the flow reads like a timeline.",
                 "Drop any link that points to a missing node; always return at least two nodes for a sankey chart.",
                 'Example sankey: {"charts":[{"id":"accession-flow","type":"sankey","title":"Accession flow","nodes":[{"id":"source","name":"Source"},{"id":"lab","name":"Lab"},{"id":"archive","name":"Archive"}],"links":[{"source":"source","target":"lab","value":120},{"source":"lab","target":"archive","value":95}]}]}',
                 "Always provide a distinct hex color for every yKeys entry. Only include data you can derive from the provided context.",
