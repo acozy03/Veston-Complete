@@ -32,6 +32,7 @@ export type Message = {
 }
 
 type TitleStatus = "ready" | "pending" | "streaming"
+type ModelProvider = "openai" | "gemini"
 
 export type Chat = {
   id: string
@@ -151,6 +152,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const [userId, setUserId] = useState<string>("")
   const [userEmail, setUserEmail] = useState<string>(user?.email || "")
   const [mode, setMode] = useState<"fast" | "slow">("fast")
+  const [modelProvider, setModelProvider] = useState<ModelProvider>("openai")
   const [radmapping, setRadmapping] = useState<boolean>(false)
   const [RAG, setDataRetrieval] = useState<boolean>(false)
   const [studyAnalysis, setStudyAnalysis] = useState<boolean>(false)
@@ -460,6 +462,21 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       if (typeof window !== "undefined") localStorage.setItem("chatMode", mode)
     } catch {}
   }, [mode])
+
+  // Load persisted model provider preference
+  useEffect(() => {
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("chatModelProvider") : null
+      if (saved === "openai" || saved === "gemini") setModelProvider(saved)
+    } catch {}
+  }, [])
+
+  // Persist model provider preference
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") localStorage.setItem("chatModelProvider", modelProvider)
+    } catch {}
+  }, [modelProvider])
 
   useEffect(
     () => () => {
@@ -796,6 +813,8 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         fast: mode === "fast",
         slow: mode === "slow",
         mode,
+        openai: modelProvider === "openai",
+        gemini: modelProvider === "gemini",
         // Requested workflows (mutually exclusive)
         radmapping,
         // Data Analysis / RAG
@@ -1068,6 +1087,8 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
               onSendQuestion={handleSendQuestion}
               mode={mode}
               onChangeMode={setMode}
+              modelProvider={modelProvider}
+              onChangeModelProvider={setModelProvider}
               radmapping={radmapping}
               RAG={RAG}
               studyAnalysis={studyAnalysis}
@@ -1116,6 +1137,8 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
                     onSendQuestion={handleSendQuestion}
                     mode={mode}
                     onChangeMode={setMode}
+                    modelProvider={modelProvider}
+                    onChangeModelProvider={setModelProvider}
                     radmapping={radmapping}
                     RAG={RAG}
                     studyAnalysis={studyAnalysis}

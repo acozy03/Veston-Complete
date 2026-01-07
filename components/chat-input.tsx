@@ -13,6 +13,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "./ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
@@ -20,6 +23,8 @@ interface ChatInputProps {
   onSendQuestion: (question: string) => void
   mode: "fast" | "slow"
   onChangeMode: (mode: "fast" | "slow") => void
+  modelProvider: "openai" | "gemini"
+  onChangeModelProvider: (provider: "openai" | "gemini") => void
   radmapping: boolean
   RAG: boolean
   studyAnalysis: boolean
@@ -35,6 +40,8 @@ export function ChatInput({
   onSendQuestion,
   mode,
   onChangeMode,
+  modelProvider,
+  onChangeModelProvider,
   radmapping,
   RAG,
   studyAnalysis,
@@ -111,27 +118,66 @@ export function ChatInput({
             </DropdownMenuTrigger>
 
             <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel>Reasoning</DropdownMenuLabel>
+              <DropdownMenuLabel>Options</DropdownMenuLabel>
               <div className="p-1">
-                <DropdownMenuItem
-                  onSelect={(e) => {
-                    e.preventDefault()
-                    onChangeMode("fast")
-                  }}
-                  className={cn("cursor-pointer", mode === "fast" && "bg-accent text-accent-foreground")}
-                >
-                  Low (Fast)
-                </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="cursor-pointer">Model options</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-56">
+                    <DropdownMenuLabel>Reasoning</DropdownMenuLabel>
+                    <div className="p-1">
+                      <DropdownMenuItem
+                        onSelect={(e) => {
+                          e.preventDefault()
+                          onChangeMode("fast")
+                        }}
+                        className={cn("cursor-pointer", mode === "fast" && "bg-accent text-accent-foreground")}
+                      >
+                        Low (Fast)
+                      </DropdownMenuItem>
 
-                <DropdownMenuItem
-                  onSelect={(e) => {
-                    e.preventDefault()
-                    onChangeMode("slow")
-                  }}
-                  className={cn("cursor-pointer", mode === "slow" && "bg-accent text-accent-foreground")}
-                >
-                  High (Slow)
-                </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={(e) => {
+                          e.preventDefault()
+                          onChangeMode("slow")
+                        }}
+                        className={cn("cursor-pointer", mode === "slow" && "bg-accent text-accent-foreground")}
+                      >
+                        High (Slow)
+                      </DropdownMenuItem>
+                    </div>
+
+                    <DropdownMenuSeparator />
+
+                    <DropdownMenuLabel>Provider</DropdownMenuLabel>
+                    <div className="p-1">
+                      <DropdownMenuItem
+                        onSelect={(e) => {
+                          e.preventDefault()
+                          onChangeModelProvider("openai")
+                        }}
+                        className={cn(
+                          "cursor-pointer",
+                          modelProvider === "openai" && "bg-accent text-accent-foreground",
+                        )}
+                      >
+                        OpenAI
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        onSelect={(e) => {
+                          e.preventDefault()
+                          onChangeModelProvider("gemini")
+                        }}
+                        className={cn(
+                          "cursor-pointer",
+                          modelProvider === "gemini" && "bg-accent text-accent-foreground",
+                        )}
+                      >
+                        Gemini
+                      </DropdownMenuItem>
+                    </div>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               </div>
 
               <DropdownMenuSeparator />
@@ -220,6 +266,8 @@ export function ChatInput({
           {!hero && (
             <p className="mt-2 text-center text-xs text-muted-foreground/80">
               {mode === "slow" ? "High (Slow)" : "Low (Fast)"}
+              {" • "}
+              {modelProvider === "gemini" ? "Gemini" : "OpenAI"}
               {" • "}
               {RAG
                 ? "Data Analysis"

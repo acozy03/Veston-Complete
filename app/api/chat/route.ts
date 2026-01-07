@@ -27,6 +27,8 @@ export async function POST(req: Request) {
       fast,
       slow,
       mode,
+      openai,
+      gemini,
       radmapping,
       RAG,
       studyAnalysis,
@@ -37,6 +39,8 @@ export async function POST(req: Request) {
       fast?: boolean
       slow?: boolean
       mode?: "fast" | "slow" | string
+      openai?: boolean
+      gemini?: boolean
       radmapping?: boolean
       RAG?: boolean
       studyAnalysis?: boolean
@@ -51,6 +55,8 @@ export async function POST(req: Request) {
         mode,
         fast: fast === true,
         slow: slow === true,
+        openai: openai === true,
+        gemini: gemini === true,
         radmapping: radmapping === true,
         RAG: RAG === true,
         studyAnalysis: studyAnalysis === true,
@@ -116,6 +122,8 @@ export async function POST(req: Request) {
         mode,
         fast: fast === true,
         slow: slow === true,
+        openai: openai === true,
+        gemini: gemini === true,
         radmapping: radmapping === true,
         RAG: RAG === true,
         studyAnalysis: studyAnalysis === true,
