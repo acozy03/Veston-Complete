@@ -121,7 +121,7 @@ export function ChatInput({
               <DropdownMenuLabel>Options</DropdownMenuLabel>
               <div className="p-1">
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="cursor-pointer">Model options</DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger className="cursor-pointer">Model specs</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-56">
                     <DropdownMenuLabel>Reasoning</DropdownMenuLabel>
                     <div className="p-1">
