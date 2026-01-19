@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import Image from "next/image"
 import { Button } from "./ui/button"
 import { ScrollArea } from "./ui/scroll-area"
@@ -34,6 +34,7 @@ interface ChatSidebarProps {
   onSelectChat: (chatId: string) => void
   onNewChat: () => void
   onDeleteChat: (chatId: string) => void
+  onRenameChat: (chatId: string, title: string) => void
   isOpen: boolean
   onToggle: () => void
   userName?: string
@@ -113,6 +114,7 @@ export function ChatSidebar({
   onSelectChat,
   onNewChat,
   onDeleteChat,
+  onRenameChat,
   isOpen,
   onToggle,
   userName = "",
@@ -122,6 +124,9 @@ export function ChatSidebar({
   const [spotlightOpen, setSpotlightOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [pendingRenameId, setPendingRenameId] = useState<string | null>(null)
+  const [renameTitle, setRenameTitle] = useState("")
 
   const readyChats = chats.filter((chat) => {
     const status = chat.titleStatus || "ready"
@@ -132,6 +137,14 @@ export function ChatSidebar({
     .map((chat) => ({ chat, matches: true as const }))
 
   const headerPadding = isOpen ? "p-4" : "p-3"
+  const renameTrimmed = renameTitle.trim()
+  const renameFallback = "Untitled chat"
+
+  const closeRenameDialog = () => {
+    setRenameOpen(false)
+    setPendingRenameId(null)
+    setRenameTitle("")
+  }
 
   return (
     <>
@@ -257,6 +270,17 @@ export function ChatSidebar({
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" sideOffset={6} onClick={(e) => e.stopPropagation()}>
                                 <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    setPendingRenameId(chat.id)
+                                    setRenameTitle(chat.pendingTitle || chat.title || "")
+                                    setRenameOpen(true)
+                                  }}
+                                >
+                                  Edit chat name
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                   className="focus:text-red-500"
                                   onClick={(e) => {
                                     e.preventDefault()
@@ -331,6 +355,52 @@ export function ChatSidebar({
               }}
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Rename chat */}
+      <AlertDialog
+        open={renameOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeRenameDialog()
+            return
+          }
+          setRenameOpen(true)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit chat name</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Input
+              value={renameTitle}
+              onChange={(event) => setRenameTitle(event.target.value)}
+              placeholder="Enter a chat title"
+              autoFocus
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                closeRenameDialog()
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingRenameId) {
+                  const finalTitle = renameTrimmed || renameFallback
+                  onRenameChat(pendingRenameId, finalTitle)
+                }
+                closeRenameDialog()
+              }}
+            >
+              Save
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

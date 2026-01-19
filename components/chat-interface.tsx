@@ -1048,6 +1048,37 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     void run()
   }
 
+  const handleRenameChat = (chatId: string, title: string) => {
+    const normalizedTitle = title.trim() || "Untitled chat"
+    setChats((prevChats) =>
+      prevChats.map((chat) =>
+        chat.id === chatId
+          ? { ...chat, title: normalizedTitle, pendingTitle: undefined, titleStatus: "ready" }
+          : chat,
+      ),
+    )
+    updateChatTitleState(chatId, { title: normalizedTitle, pendingTitle: undefined, titleStatus: "ready" })
+
+    const run = async () => {
+      try {
+        let query = supabase
+          .from("chats")
+          .update({ title: normalizedTitle })
+          .eq("id", chatId)
+          .eq("user_email", userEmail || "")
+
+        if (userId) {
+          query = query.eq("user_id", userId)
+        }
+
+        await query
+      } catch (error) {
+        console.warn("[chat:title] rename failed", error)
+      }
+    }
+    void run()
+  }
+
   return (
     <div className="flex h-screen min-h-0 bg-background dark">
       <ChatSidebar
@@ -1056,6 +1087,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         onSelectChat={(id) => selectChat(id, { serverId: id })}
         onNewChat={handleNewChat}
         onDeleteChat={handleDeleteChat}
+        onRenameChat={handleRenameChat}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         userName={user?.name}
