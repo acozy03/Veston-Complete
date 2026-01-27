@@ -1,17 +1,33 @@
-// eslint.config.js
 import { defineConfig } from "eslint/config";
+import tsPlugin from "@typescript-eslint/eslint-plugin";
+import tsParser from "@typescript-eslint/parser";
 
 export default defineConfig([
   {
-    files: ["**/*.js"],
-    rules: {
-      semi: "off", // <-- don't report missing semicolons
-    },
+    ignores: ["**/.next/**", "**/node_modules/**", "**/dist/**"],
   },
-
   {
     files: ["**/*.js"],
-    ignores: ["__tests/**"],
+    rules: {
+      semi: "off",
+      "no-console": "error",
+    },
+  },
+  {
+    files: ["**/*.{ts,tsx}"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+    },
+    plugins: {
+      "@typescript-eslint": tsPlugin,
+    },
     rules: {
       "no-console": "error",
     },
