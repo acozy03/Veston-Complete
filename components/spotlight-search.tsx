@@ -43,7 +43,6 @@ export function SpotlightSearch({ open, onOpenChange, chats, onSelectChat }: Spo
   )
   const chatIds = useMemo(() => readyChats.map((c) => c.id), [readyChats])
 
-  // Keyboard shortcut: Ctrl/Cmd+K to open
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -56,7 +55,6 @@ export function SpotlightSearch({ open, onOpenChange, chats, onSelectChat }: Spo
     return () => window.removeEventListener("keydown", down)
   }, [onOpenChange])
 
-  // Debounced search across messages for current chats
   useEffect(() => {
     if (!open) return
     const q = query.trim()

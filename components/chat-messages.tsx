@@ -38,7 +38,6 @@ export function ChatMessages({ messages, isTyping }: ChatMessagesProps) {
     <ScrollArea className="flex-1">
       <div className="mx-auto w-full max-w-5xl px-6 py-10">
         <div className="space-y-2">
-          {/** Hide accidental consecutive duplicate user messages visually */}
           {messages
             .filter((m, i, arr) => {
               if (i === 0) return true
@@ -123,8 +122,6 @@ components={{
                         {message.content}
                       </ReactMarkdown>
                     </div>
-
-                    {/** Moved copy button below sources, alongside timestamp */}
 
                     {message.sources && message.sources.length > 0 && (
                       <div className="mt-4 w-full rounded-md border border-border/60 bg-background/80 p-3 text-sm">

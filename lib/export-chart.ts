@@ -5,10 +5,6 @@ type ExportFormat = "png" | "svg"
 type ChartExportOptions = {
   chartRoot: HTMLElement
   chartId: string
-  /**
-   * Optional container to use as a fallback when searching for elements
-   * like the chart canvas area.
-   */
   componentRoot?: HTMLElement
   title?: string
   description?: string

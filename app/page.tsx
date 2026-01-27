@@ -49,7 +49,6 @@ export default async function Home({ searchParams }: PageProps) {
       }
     }
   } catch {
-    // ignore; user may not be authenticated yet (AuthGate will trigger)
   }
 
   return (

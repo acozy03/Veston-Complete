@@ -10,7 +10,6 @@ type Props = {
 export default function AuthGate({ children }: Props) {
   useEffect(() => {
     const run = async () => {
-      // Avoid triggering OAuth while on the callback route
       if (typeof window === 'undefined') return
       if (window.location.pathname.startsWith('/auth/callback')) return
 
@@ -23,9 +22,7 @@ export default function AuthGate({ children }: Props) {
           options: {
             redirectTo,
             queryParams: {
-              // Prompt the consent screen on every attempt as requested
               prompt: 'consent',
-              // Request refresh token (useful if you need long-lived sessions)
               access_type: 'offline',
             },
           },

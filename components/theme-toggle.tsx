@@ -14,7 +14,6 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
   useEffect(() => setMounted(true), []);
 
   if (!mounted) {
-    // Render a stable placeholder that matches server and first client render
     return (
       <Button
         type="button"
@@ -22,8 +21,8 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         size="icon"
         className={className}
         aria-label="Toggle theme"
-        aria-pressed={false}      // or omit: aria-pressed={undefined}
-        suppressHydrationWarning  // optional extra safety for this subtree
+        aria-pressed={false}      
+        suppressHydrationWarning  
       >
         <Moon className="h-5 w-5" />
       </Button>

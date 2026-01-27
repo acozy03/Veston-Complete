@@ -42,19 +42,6 @@ interface ChatSidebarProps {
   avatarUrl?: string
 }
 
-function searchInChat(chat: Chat, query: string): { matches: boolean; snippet?: string } {
-  const lowerQuery = query.toLowerCase()
-
-  if (chat.title.toLowerCase().includes(lowerQuery)) {
-    return { matches: true, snippet: chat.preview }
-  }
-
-  if (chat.preview && chat.preview.toLowerCase().includes(lowerQuery)) {
-    return { matches: true, snippet: chat.preview }
-  }
-
-  return { matches: false }
-}
 
 function useTypewriterTitle(title: string, pendingTitle?: string, status?: Chat["titleStatus"]) {
   const [display, setDisplay] = useState(title)
@@ -173,7 +160,7 @@ export function ChatSidebar({
     isOpen ? "gap-1" : "flex-col gap-2"
   )}
 >
-  {/* Theme Toggle */}
+
   <ThemeToggle
     className={cn(
       !isOpen ? "h-10 w-10" : undefined,
@@ -181,7 +168,6 @@ export function ChatSidebar({
     )}
   />
 
-  {/* Sidebar Toggle */}
   <Button
     variant="ghost"
     size="icon"
@@ -250,7 +236,6 @@ export function ChatSidebar({
                                 <ChatSidebarTitle chat={chat} />
                               </div>
                             </TooltipTrigger>
-                            {/* Preview removed per request */}
                           </div>
                           <div className="ml-1 shrink-0">
                             <DropdownMenu>
@@ -334,7 +319,6 @@ export function ChatSidebar({
         )}
       </aside>
 
-      {/* Delete confirmation */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -406,7 +390,6 @@ export function ChatSidebar({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Spotlight search modal */}
       <SpotlightSearch
         open={spotlightOpen}
         onOpenChange={setSpotlightOpen}

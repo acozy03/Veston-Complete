@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServerSupabase } from "@/lib/supabase/server"
 
-// Single n8n classifier webhook endpoint
 const N8N_CLASSIFIER_URL = process.env.N8N_CLASSIFIER_URL
 
 const normalizeVisualizations = (value: unknown): unknown | null => {
@@ -47,7 +46,6 @@ export async function POST(req: Request) {
       noWorkflow?: boolean
     } = await req.json()
 
-    // Server-side debug log of incoming request fields
     try {
       const preview = typeof question === 'string' ? (question.length > 80 ? question.slice(0, 80) + '...' : question) : ''
       console.log('[api/chat] request', {
@@ -69,7 +67,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Question is required" }, { status: 400 })
     }
 
-    // Identify the signed-in user (RLS)
     const supabase = await createServerSupabase()
     const { data: userRes, error: userErr } = await supabase.auth.getUser()
     if (userErr || !userRes?.user) {
@@ -77,7 +74,6 @@ export async function POST(req: Request) {
     }
     const user = userRes.user
 
-    // Create or retrieve chat row (scoped by user)
     let effectiveChatId = chatId
     if (!effectiveChatId) {
       const { data: chatInsert, error: chatErr } = await supabase
@@ -92,7 +88,6 @@ export async function POST(req: Request) {
       effectiveChatId = chatInsert.id as string
     }
 
-    // Insert user message
     const { data: msgInsert, error: msgErr } = await supabase
       .from('messages')
       .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'user', content: question })
@@ -104,13 +99,11 @@ export async function POST(req: Request) {
     }
     const userMessageId = msgInsert.id as string
 
-    // Skip intermediate clarifier/memory step for speed
     const effectiveQuestion = question
     if (!N8N_CLASSIFIER_URL) {
       return NextResponse.json({ error: "Missing N8N_CLASSIFIER_URL" }, { status: 500 })
     }
 
-    // Route directly to the single n8n classifier webhook
     const workflowResponse = await fetch(N8N_CLASSIFIER_URL, {
       method: "POST",
       headers: {
@@ -118,7 +111,6 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         question: effectiveQuestion,
-        // forward mode flags so n8n can choose models
         mode,
         fast: fast === true,
         slow: slow === true,
@@ -128,7 +120,6 @@ export async function POST(req: Request) {
         RAG: RAG === true,
         studyAnalysis: studyAnalysis === true,
         noWorkflow: noWorkflow === true,
-        // helpful context
         chatId: effectiveChatId,
         timestamp: new Date().toISOString(),
       }),
@@ -144,7 +135,6 @@ export async function POST(req: Request) {
     try {
       workflowJson = JSON.parse(workflowText)
     } catch {
-      // response was plain text; keep raw text
     }
 
     if (!workflowResponse.ok) {
@@ -162,8 +152,6 @@ let obj = (typeof workflowJson === "object" && workflowJson !== null
   ? (workflowJson as JsonRecord)
   : null);
 
-// n8n sometimes wraps the real JSON inside an `output` key
-// Handle both stringified and object forms
 if (obj && typeof (obj as any).output === 'string') {
   try {
     const inner = JSON.parse((obj as any).output);
@@ -171,7 +159,6 @@ if (obj && typeof (obj as any).output === 'string') {
       obj = inner as JsonRecord;
     }
   } catch {
-    // keep original obj if parse fails
   }
 }
 
@@ -179,7 +166,6 @@ if (obj && typeof (obj as any).output === 'object' && (obj as any).output !== nu
   obj = (obj as any).output as JsonRecord;
 }
 
-// Also unwrap common containers like `{ data: {...} }`
 if (obj && typeof (obj as any).data === 'object' && (obj as any).data !== null) {
   obj = (obj as any).data as JsonRecord;
 }
@@ -188,7 +174,6 @@ try {
   console.log('[chat] unwrapped object keys:', obj ? Object.keys(obj) : null)
 } catch {}
 
-// Handle Google Bucket Scraper array payloads that contain a markdown `message` field
 let reply: string;
 let sources: Array<{ url: string; title?: string; snippet?: string; score?: number }> | undefined;
 let visualizations: unknown;
@@ -203,7 +188,6 @@ if (Array.isArray(workflowJson)) {
     (obj?.response && typeof obj.response === "string" && obj.response) ||
     (typeof workflowText === "string" ? workflowText : JSON.stringify(workflowJson));
 
-  // Optional structured sources passthrough
   const rawSources = Array.isArray((obj as any)?.sources) ? (obj as any).sources : undefined
   if (rawSources) {
     sources = rawSources
@@ -236,7 +220,6 @@ try {
   }
 } catch {}
 
-// If sources are present, strip their URLs from the reply so links only appear in the Sources box
 const stripUrlFromText = (text: string, url: string) => {
   if (!text || !url) return text
   let out = text
@@ -249,13 +232,12 @@ const stripUrlFromText = (text: string, url: string) => {
   for (const v of variants) {
     out = out.split(v).join("")
   }
-  // Clean up leftover extra spaces but PRESERVE newlines
   out = out
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\[\s*\]/g, '')
     .replace(/\(\s*\)/g, '')
-    .replace(/[ \t]+\n/g, '\n') // trim spaces before newline
-    .replace(/\n{3,}/g, '\n\n') // collapse 3+ newlines to 2
+    .replace(/[ \t]+\n/g, '\n') 
+    .replace(/\n{3,}/g, '\n\n') 
     .trim()
   return out
 }
@@ -270,7 +252,6 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
   if (normalizedVisualizations !== null) {
     visualizations = normalizedVisualizations
   }
-  // Save assistant reply to messages (capture id for source linking)
   const { data: assistantInsert, error: assistantErr } = await supabase
     .from('messages')
     .insert({ chat_id: effectiveChatId, user_email: user.email, role: 'assistant', content: reply })
@@ -281,7 +262,6 @@ if (Array.isArray(sources) && sources.length > 0 && typeof reply === 'string') {
     console.error('Failed to insert assistant message', assistantErr)
   }
 
-  // Opportunistically persist sources if available (ignore if table doesn't exist)
   if (assistantInsert?.id && Array.isArray(sources) && sources.length > 0) {
     try {
       const rows = sources.map((s) => ({

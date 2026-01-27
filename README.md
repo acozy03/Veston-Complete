@@ -1,187 +1,134 @@
-# ChatBot Interface
+# Veston | Radiology Assistant
 
-A sleek, minimal, and clean chatbot interface inspired by ChatGPT. This is a frontend-only implementation that provides a beautiful UI foundation for building conversational AI applications.
+Veston is a production-ready radiology assistant experience built on Next.js. It pairs a refined chat UI with authenticated, persisted conversations, workflow routing, citations, and data visualizations.
 
 ## Features
 
-- **Clean, Modern Design**: Dark theme with excellent contrast and smooth animations
-- **Responsive Layout**: Works seamlessly on desktop, tablet, and mobile devices
-- **Chat Management**: Create, switch between, and delete multiple chat conversations
-- **Search Functionality**: Quickly find specific chats using the search bar
-- **Message Display**: Beautiful message bubbles for user and assistant messages
-- **Typing Indicators**: Visual feedback when the assistant is "thinking"
-- **Auto-resizing Input**: Text input grows as you type longer messages
-- **Collapsible Sidebar**: Toggle sidebar visibility on mobile devices
+- **Authenticated Chat**: Google OAuth via Supabase with per-user chat persistence.
+- **Conversation Management**: Create, rename, switch, search, and delete chats with sidebar and spotlight search.
+- **Model Routing Controls**: Toggle fast/slow reasoning, OpenAI/Gemini providers, and workflow flags (RadMapping+, Data Analysis, Study Analysis).
+- **Citations + Sources**: Optional sources displayed per assistant response with snippets and scores.
+- **Auto Visualizations**: Gemini-based classifier + generator builds chart specs and renders charts inline.
+- **Spreadsheet Preview**: XLSX links open a built-in preview with download support.
+- **Markdown + Copy**: Markdown rendering, code blocks, and one-click copy on assistant messages.
+- **Theming**: Light/dark/system themes with a global toggle.
+- **Analytics Ready**: Vercel Analytics wiring included.
 
 ## Getting Started
 
 ### Installation
 
-1. **Download the project** from v0 by clicking the three dots in the top right and selecting "Download ZIP"
-
-2. **Install dependencies**:
-   \`\`\`bash
+1. **Install dependencies**:
+   ```bash
    npm install
    # or
    yarn install
    # or
    pnpm install
-   \`\`\`
+   ```
+
+2. **Configure environment variables** in `.env.local`:
+   ```bash
+   # Supabase (required)
+   NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+
+   # n8n workflow router (required for /api/chat)
+   N8N_CLASSIFIER_URL=https://your-n8n-host/webhook/your-endpoint
+
+   # Vertex AI (required for chart classification + generation)
+   GCP_PROJECT_ID=your-gcp-project
+   GCP_LOCATION=us-central1
+   VISUAL_CLASSIFIER_MODEL=gemini-2.5-flash
+   VISUAL_GENERATOR_MODEL=gemini-2.5-flash
+   ```
 
 3. **Run the development server**:
-   \`\`\`bash
+   ```bash
    npm run dev
    # or
    yarn dev
    # or
    pnpm dev
-   \`\`\`
+   ```
 
 4. **Open your browser** and navigate to `http://localhost:3000`
 
+### Supabase Tables (Recommended)
+
+Create tables for chat persistence + enhancements:
+
+- `chats`: `id`, `user_id`, `user_email`, `title`, `created_at`, `updated_at`
+- `messages`: `id`, `chat_id`, `user_email`, `role`, `content`, `created_at`
+- `message_sources` (optional): `message_id`, `chat_id`, `user_email`, `url`, `title`, `snippet`, `score`
+- `message_visualizations` (optional): `message_id`, `chat_id`, `user_email`, `visualizations`
+
 ## Project Structure
 
-\`\`\`
+```
 ├── app/
+│   ├── api/                  # Chat + visualization routes
+│   ├── auth/                 # Supabase OAuth callback
+│   ├── preview/              # XLSX preview experience
 │   ├── page.tsx              # Main page component
-│   ├── layout.tsx            # Root layout with fonts
+│   ├── layout.tsx            # Root layout with fonts + auth gate
 │   └── globals.css           # Global styles and design tokens
 ├── components/
+│   ├── auth-gate.tsx         # Google OAuth gate
 │   ├── chat-interface.tsx    # Main chat interface container
 │   ├── chat-sidebar.tsx      # Sidebar with chat history and search
-│   ├── chat-messages.tsx     # Message display area
-│   ├── chat-input.tsx        # Message input field
+│   ├── chat-messages.tsx     # Message display + citations + charts
+│   ├── chat-input.tsx        # Message input + workflow toggles
+│   ├── chart-visualizations.tsx # Recharts visualizations
+│   ├── spotlight-search.tsx  # Command-k style search
 │   └── ui/                   # shadcn/ui components
 └── lib/
+    ├── supabase/             # Supabase client/server helpers
+    ├── visualization.ts      # Chart spec helpers
     └── utils.ts              # Utility functions
-\`\`\`
+```
 
-## Connecting a Backend
+## Chat Workflow Integration
 
-This is a frontend-only implementation. To connect it to a real AI backend, you'll need to:
+`/api/chat` forwards every question to your n8n workflow router (`N8N_CLASSIFIER_URL`). The workflow can reply with:
 
-### 1. Using Vercel AI SDK (Recommended)
-
-Install the AI SDK:
-\`\`\`bash
-npm install ai @ai-sdk/openai
-\`\`\`
-
-Create an API route at `app/api/chat/route.ts`:
-\`\`\`typescript
-import { openai } from '@ai-sdk/openai'
-import { streamText } from 'ai'
-
-export async function POST(req: Request) {
-  const { messages } = await req.json()
-
-  const result = streamText({
-    model: openai('gpt-4'),
-    messages,
-  })
-
-  return result.toDataStreamResponse()
+```json
+{
+  "reply": "assistant response",
+  "sources": [
+    { "url": "https://example.com", "title": "Source title", "snippet": "...", "score": 0.82 }
+  ],
+  "visualizations": [
+    { "id": "chart-1", "type": "bar", "title": "Example", "data": [] }
+  ]
 }
-\`\`\`
+```
 
-Update `components/chat-interface.tsx` to use the `useChat` hook:
-\`\`\`typescript
-import { useChat } from 'ai/react'
+If `sources` or `visualizations` are provided, they will be stored (if tables exist) and rendered in the UI.
 
-// Replace the mock sendMessage function with:
-const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat()
-\`\`\`
+## Visualization Pipeline
 
-### 2. Using Custom API
+When an answer appears suitable for charts, `/api/visuals/classify` and `/api/visuals/generate` use Vertex AI (Gemini) to create Recharts-compatible chart specs. These charts are stored in Supabase when possible and rendered inline next to the assistant response.
 
-Modify the `sendMessage` function in `components/chat-interface.tsx`:
+## Spreadsheet Preview
 
-\`\`\`typescript
-const sendMessage = async (content: string) => {
-  // Add user message
-  const userMessage: Message = {
-    id: Date.now().toString(),
-    role: "user",
-    content,
-    timestamp: new Date(),
-  }
-  
-  setCurrentMessages((prev) => [...prev, userMessage])
-  setIsTyping(true)
-
-  try {
-    // Call your API
-    const response = await fetch('/api/your-endpoint', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: content }),
-    })
-
-    const data = await response.json()
-
-    // Add assistant response
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: data.response,
-      timestamp: new Date(),
-    }
-
-    setCurrentMessages((prev) => [...prev, assistantMessage])
-  } catch (error) {
-    console.error('Error:', error)
-  } finally {
-    setIsTyping(false)
-  }
-}
-\`\`\`
+Links ending in `.xlsx` (or matching spreadsheet MIME types) open a built-in preview at `/preview/xlsx`, with a one-click download via `/api/proxy-file`.
 
 ## Customization
 
 ### Changing Colors
 
-Edit the design tokens in `app/globals.css`:
-
-\`\`\`css
-@theme inline {
-  --color-background: #0a0a0a;
-  --color-foreground: #ededed;
-  /* ... modify other colors ... */
-}
-\`\`\`
+Edit the design tokens in `app/globals.css`.
 
 ### Adding Features
 
-**Markdown Support**: Install `react-markdown` to render formatted messages:
-\`\`\`bash
-npm install react-markdown
-\`\`\`
+**Swap auth providers**: Update `components/auth-gate.tsx` to switch Supabase OAuth providers.
 
-**Code Highlighting**: Add syntax highlighting for code blocks:
-\`\`\`bash
-npm install react-syntax-highlighter
-\`\`\`
+**Add new workflows**: Extend the options in `components/chat-input.tsx` and forward flags to `/api/chat`.
 
-**File Uploads**: Extend `chat-input.tsx` to handle file attachments
+**Override chart rendering**: Update `components/chart-visualizations.tsx`.
 
-**Voice Input**: Add speech-to-text functionality using the Web Speech API
-
-### Persisting Chat History
-
-Add local storage or database integration:
-
-\`\`\`typescript
-// Save to localStorage
-useEffect(() => {
-  localStorage.setItem('chats', JSON.stringify(chats))
-}, [chats])
-
-// Load from localStorage
-useEffect(() => {
-  const saved = localStorage.getItem('chats')
-  if (saved) setChats(JSON.parse(saved))
-}, [])
-\`\`\`
+**Voice Input**: Add speech-to-text functionality using the Web Speech API.
 
 ## Deployment
 
@@ -192,27 +139,25 @@ Deploy to Vercel with one click:
 3. Deploy!
 
 Or use the Vercel CLI:
-\`\`\`bash
+```bash
 npm install -g vercel
 vercel
-\`\`\`
+```
 
 ## Tech Stack
 
 - **Next.js 15** - React framework with App Router
 - **TypeScript** - Type safety
 - **Tailwind CSS v4** - Utility-first styling
-- **shadcn/ui** - High-quality UI components
-- **Lucide Icons** - Beautiful icon set
+- **Supabase** - Auth + persistence
+- **Vertex AI (Gemini)** - Visualization classification + generation
+- **Recharts** - Data visualization rendering
+- **shadcn/ui** - UI components
+- **Lucide Icons** - Icon set
 
 ## Contributing
 
-This is a starter template. Feel free to customize it for your needs:
-
-- Add authentication
-- Integrate with your preferred AI provider
-- Add more features like image generation, file uploads, etc.
-- Customize the design to match your brand
+Feel free to open issues or PRs. This repo powers a production chat experience, so changes should be well-documented and tested.
 
 ## License
 
@@ -220,4 +165,4 @@ MIT License - feel free to use this in your projects!
 
 ## Support
 
-For issues or questions about this template, visit [v0.dev](https://v0.dev) or check the [Next.js documentation](https://nextjs.org/docs).
+For issues or questions, start with the [Next.js documentation](https://nextjs.org/docs) and Supabase guides.

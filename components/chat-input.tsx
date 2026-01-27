@@ -55,12 +55,9 @@ export function ChatInput({
   const [question, setQuestion] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Shared sizing tokens so the textarea + icon buttons always match
   const HERO_H = "h-14"
   const HERO_W = "w-14"
   const HERO_RADIUS = "rounded-xl"
-
-  // Non-hero: make icon buttons match a 40px input
   const BASE_ICON = "h-11 w-11"
 
   useEffect(() => {
@@ -90,8 +87,6 @@ export function ChatInput({
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setQuestion(e.target.value)
-
-    // Auto-grow with a hard max
     e.target.style.height = "auto"
     e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`
   }
@@ -99,7 +94,6 @@ export function ChatInput({
   return (
     <div className={cn(hero ? "p-0" : "border-t border-border bg-background p-4")}>
       <div className={cn("mx-auto", "max-w-3xl")}>
-        {/* items-center makes the 40px buttons + 40px textarea line up perfectly */}
         <div className="relative flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -226,9 +220,7 @@ export function ChatInput({
             rows={1}
             className={cn(
               "w-full flex-1 max-h-[200px] resize-none bg-input text-foreground placeholder:text-muted-foreground",
-              // non-hero: explicitly 40px tall so it matches BASE_ICON
               "h-11 min-h-0 rounded-md px-3 py-2 leading-6",
-              // hero: 56px tall + visually centered single-line text
               hero && `${HERO_H} min-h-0 ${HERO_RADIUS} px-4 py-3 text-base leading-6`,
             )}
           />

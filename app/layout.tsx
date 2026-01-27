@@ -11,7 +11,7 @@ import AuthGate from "@/components/auth-gate"
 export const metadata: Metadata = {
   title: "Veston | Radiology Assistant",
   description: "Veston helps teams triage radiology questions with smart routing.",
-  generator: "v0.app",
+  generator: "Adrian C",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
