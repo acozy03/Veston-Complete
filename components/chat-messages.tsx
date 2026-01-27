@@ -30,15 +30,18 @@ const isXlsxUrl = (url: string) =>
   /filename=.*\.xlsx/i.test(url) ||
   /application%2Fvnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/i.test(url)
 
-const decodeBase64 = (data: string) => {
+const decodeBase64 = (data: string): Uint8Array<ArrayBuffer> => {
   const binary = atob(data)
   const len = binary.length
-  const bytes = new Uint8Array(len)
+  const buffer = new ArrayBuffer(len)
+  const bytes = new Uint8Array(buffer)
   for (let i = 0; i < len; i += 1) {
     bytes[i] = binary.charCodeAt(i)
   }
   return bytes
 }
+
+type MarkdownCodeProps = ComponentPropsWithoutRef<"code"> & { inline?: boolean }
 
 const inferFilename = (url: string, contentType?: string | null) => {
   try {
@@ -177,7 +180,7 @@ components={{
     </pre>
   ),
 
-  code: ({ inline, className, children, ...props }) => {
+  code: ({ inline, className, children, ...props }: MarkdownCodeProps) => {
     if (inline) {
       return (
         <code className={cn("markdown-codeinline bg-muted/40", className)} {...props}>

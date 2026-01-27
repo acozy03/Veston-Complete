@@ -1,4 +1,5 @@
 import ChatInterface from "@/components/chat-interface.client"
+import type { Chat, Message } from "@/components/chat-interface"
 import { createServerSupabase } from "@/lib/supabase/server"
 
 type PageProps = {
@@ -7,12 +8,12 @@ type PageProps = {
 
 export default async function Home({ searchParams }: PageProps) {
   const resolvedSearchParams = (await searchParams) || {}
-  let initialChats: Array<{ id: string; title: string; createdAt: Date }> = []
+  let initialChats: Chat[] = []
   const requestedChatId = Array.isArray(resolvedSearchParams.chatId)
     ? resolvedSearchParams.chatId?.[0]
     : resolvedSearchParams.chatId
   let initialChatId = requestedChatId || ""
-  let initialMessages: Array<{ id: string; role: "user" | "assistant"; content: string; timestamp: Date }> = []
+  let initialMessages: Message[] = []
   let user: { name?: string; email?: string; avatarUrl?: string } | undefined
 
   try {
@@ -29,7 +30,12 @@ export default async function Home({ searchParams }: PageProps) {
         .select("id, title, created_at, updated_at")
         .eq("user_email", u.email)
         .order("updated_at", { ascending: false })
-      initialChats = (chats || []).map((c) => ({ id: c.id as string, title: (c.title as string) || "New Chat", createdAt: new Date(c.created_at as string) }))
+      initialChats = (chats || []).map((c: { id: string; title: string | null; created_at: string }) => ({
+        id: c.id,
+        title: c.title || "New Chat",
+        createdAt: new Date(c.created_at),
+        messages: [],
+      }))
       const resolvedInitialChatId =
         (requestedChatId && initialChats.find((chat) => chat.id === requestedChatId)?.id) || initialChats[0]?.id || ""
       if (resolvedInitialChatId) {
@@ -40,11 +46,11 @@ export default async function Home({ searchParams }: PageProps) {
           .eq("chat_id", resolvedInitialChatId)
           .eq("user_email", u.email)
           .order("created_at", { ascending: true })
-        initialMessages = (msgs || []).map((m) => ({
-          id: m.id as string,
-          role: (m.role as string) === 'assistant' ? 'assistant' : 'user',
-          content: m.content as string,
-          timestamp: new Date(m.created_at as string),
+        initialMessages = (msgs || []).map((m: { id: string; role: string; content: string; created_at: string }) => ({
+          id: m.id,
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content,
+          timestamp: new Date(m.created_at),
         }))
       }
     }

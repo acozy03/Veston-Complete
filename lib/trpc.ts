@@ -1,4 +1,5 @@
 import { initTRPC, TRPCError } from "@trpc/server"
+import { isIP } from "node:net"
 import { z } from "zod"
 import { createServerSupabase } from "@/lib/supabase/server"
 import { prepareChartSpecs, stringifyForPrompt } from "@/lib/visualization"
@@ -19,6 +20,56 @@ const vertexAI = new VertexAI({ project, location })
 const visualClassifierModel = vertexAI.getGenerativeModel({ model: VISUAL_CLASSIFIER_MODEL })
 const visualGeneratorModel = vertexAI.getGenerativeModel({ model: VISUAL_GENERATOR_MODEL })
 const chatTitleModel = vertexAI.getGenerativeModel({ model: CHAT_TITLE_MODEL })
+
+const TRUSTED_PROXY_HOSTS = (process.env.PROXY_FILE_ALLOWED_HOSTS ?? "")
+  .split(",")
+  .map((host) => host.trim().toLowerCase())
+  .filter(Boolean)
+const TRUSTED_PROXY_SCHEMES = (process.env.PROXY_FILE_ALLOWED_SCHEMES ?? "")
+  .split(",")
+  .map((scheme) => scheme.trim().toLowerCase())
+  .filter(Boolean)
+
+const isPrivateHostname = (hostname: string) => {
+  const normalized = hostname.toLowerCase()
+  if (normalized === "localhost" || normalized.endsWith(".localhost")) return true
+
+  const ipVersion = isIP(normalized)
+  if (ipVersion === 4) {
+    const parts = normalized.split(".").map((part) => Number.parseInt(part, 10))
+    const [a, b] = parts
+    if (a === 10) return true
+    if (a === 127) return true
+    if (a === 0) return true
+    if (a === 169 && b === 254) return true
+    if (a === 192 && b === 168) return true
+    if (a === 172 && b >= 16 && b <= 31) return true
+  }
+  if (ipVersion === 6) {
+    if (normalized === "::1") return true
+    if (normalized.startsWith("fd") || normalized.startsWith("fc")) return true
+    if (normalized.startsWith("fe80")) return true
+  }
+
+  return false
+}
+
+const isAllowedProxyUrl = (url: URL) => {
+  const scheme = url.protocol.replace(":", "").toLowerCase()
+  if (!["http", "https"].includes(scheme)) return false
+  if (isPrivateHostname(url.hostname)) return false
+
+  const hostname = url.hostname.toLowerCase()
+  const hostAllowed =
+    TRUSTED_PROXY_HOSTS.length > 0
+      ? TRUSTED_PROXY_HOSTS.some((allowed) =>
+          allowed.startsWith("*.") ? hostname.endsWith(allowed.slice(1)) : hostname === allowed,
+        )
+      : false
+  const schemeAllowed = TRUSTED_PROXY_SCHEMES.length > 0 ? TRUSTED_PROXY_SCHEMES.includes(scheme) : false
+
+  return hostAllowed || schemeAllowed
+}
 
 const normalizeVisualizations = (value: unknown): unknown | null => {
   if (Array.isArray(value)) return value
@@ -525,9 +576,27 @@ export const appRouter = t.router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Missing src" })
         }
 
+        const supabase = await createServerSupabase()
+        const { data: userRes, error: userErr } = await supabase.auth.getUser()
+        if (userErr || !userRes?.user) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Unauthorized" })
+        }
+
+        let targetUrl: URL
+        try {
+          targetUrl = new URL(src)
+        } catch {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid src URL" })
+        }
+
+        // TODO: Replace proxying with short-lived signed URLs for safer access control.
+        if (!isAllowedProxyUrl(targetUrl)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "URL not allowed" })
+        }
+
         let upstream: Response
         try {
-          upstream = await fetch(src)
+          upstream = await fetch(targetUrl)
         } catch (error) {
           throw new TRPCError({ code: "BAD_GATEWAY", message: "Upstream fetch failed", cause: error })
         }

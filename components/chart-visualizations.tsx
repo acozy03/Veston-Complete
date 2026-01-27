@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
+import type { ElementType } from "react"
 import {
   Area,
   AreaChart,
@@ -49,8 +50,8 @@ type ChartRendererProps = {
 }
 
 const truncateLabel = (label: string | number, maxLength = 12) => {
-  if (typeof label !== "string") return label
-  return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label
+  const text = String(label)
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text
 }
 
 const truncateText = (text: string | undefined, maxLength = 80) => {
@@ -229,7 +230,12 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       return undefined
     }
 
-    const resolveNodeLabel = (nodeRef: any) => resolveNode(nodeRef)?.name || resolveNode(nodeRef)?.id || nodeRef
+    const resolveNodeLabel = (nodeRef: any) => {
+      const resolved = resolveNode(nodeRef)
+      const label = resolved?.name || resolved?.id || nodeRef
+      if (label === null || label === undefined) return undefined
+      return String(label)
+    }
 
     const SankeyNode = (props: any) => {
       const { x, y, width, height, index, payload, ...events } = props
@@ -361,7 +367,6 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
             linkCurvature={0.5}
             node={SankeyNode}
             link={SankeyLink}
-            nodeId="id"
           />
         </ResponsiveContainer>
         {renderSankeyTooltip()}
@@ -434,7 +439,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
   const yKeys = hydrated.yKeys && hydrated.yKeys.length > 0 ? hydrated.yKeys : [{ key: "value", label: "value" }]
 
   const ChartComponent = hydrated.type === "area" ? AreaChart : hydrated.type === "line" ? LineChart : BarChart
-  const SeriesComponent = hydrated.type === "area" ? Area : hydrated.type === "line" ? Line : Bar
+  const SeriesComponent = (hydrated.type === "area" ? Area : hydrated.type === "line" ? Line : Bar) as ElementType
   const isLine = hydrated.type === "line"
   const isArea = hydrated.type === "area"
   const isBar = hydrated.type === "bar"
