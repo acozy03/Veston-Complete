@@ -813,7 +813,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         noWorkflow: !radmapping && !RAG && !studyAnalysis,
       }
       // Client-side debug log for visibility in devtools
-      try { console.log("POST /api/chat payload", payload) } catch {}
+      try { console.log("trpc.chat.ask payload", payload) } catch {}
       const parsed = await chatMutation.mutateAsync(payload)
       const parsedJson = typeof parsed === "object" && parsed !== null ? (parsed as any) : null
 

@@ -33,7 +33,7 @@ Veston is a production-ready radiology assistant experience built on Next.js. It
    NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 
-   # n8n workflow router (required for /api/chat)
+   # n8n workflow router (required for tRPC chat workflow)
    N8N_CLASSIFIER_URL=https://your-n8n-host/webhook/your-endpoint
 
    # Vertex AI (required for chart classification + generation)
@@ -67,7 +67,7 @@ Create tables for chat persistence + enhancements:
 
 ```
 ├── app/
-│   ├── api/                  # Chat + visualization routes
+│   ├── api/                  # tRPC route handler
 │   ├── auth/                 # Supabase OAuth callback
 │   ├── preview/              # XLSX preview experience
 │   ├── page.tsx              # Main page component
@@ -90,7 +90,9 @@ Create tables for chat persistence + enhancements:
 
 ## Chat Workflow Integration
 
-`/api/chat` forwards every question to your n8n workflow router (`N8N_CLASSIFIER_URL`). The workflow can reply with:
+All API interactions are standardized through tRPC (`/api/trpc`); legacy REST routes are deprecated and removed.
+
+The `chat.ask` tRPC mutation forwards every question to your n8n workflow router (`N8N_CLASSIFIER_URL`). The workflow can reply with:
 
 ```json
 {
@@ -108,11 +110,11 @@ If `sources` or `visualizations` are provided, they will be stored (if tables ex
 
 ## Visualization Pipeline
 
-When an answer appears suitable for charts, `/api/visuals/classify` and `/api/visuals/generate` use Vertex AI (Gemini) to create Recharts-compatible chart specs. These charts are stored in Supabase when possible and rendered inline next to the assistant response.
+When an answer appears suitable for charts, the `visuals.classify` and `visuals.generate` tRPC mutations use Vertex AI (Gemini) to create Recharts-compatible chart specs. These charts are stored in Supabase when possible and rendered inline next to the assistant response.
 
 ## Spreadsheet Preview
 
-Links ending in `.xlsx` (or matching spreadsheet MIME types) open a built-in preview at `/preview/xlsx`, with a one-click download via `/api/proxy-file`.
+Links ending in `.xlsx` (or matching spreadsheet MIME types) open a built-in preview at `/preview/xlsx`, with a one-click download via the `proxyFile.fetch` tRPC query.
 
 ## Customization
 
@@ -124,7 +126,7 @@ Edit the design tokens in `app/globals.css`.
 
 **Swap auth providers**: Update `components/auth-gate.tsx` to switch Supabase OAuth providers.
 
-**Add new workflows**: Extend the options in `components/chat-input.tsx` and forward flags to `/api/chat`.
+**Add new workflows**: Extend the options in `components/chat-input.tsx` and forward flags to `chat.ask`.
 
 **Override chart rendering**: Update `components/chart-visualizations.tsx`.
 
