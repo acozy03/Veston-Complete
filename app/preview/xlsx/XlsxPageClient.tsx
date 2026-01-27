@@ -3,23 +3,30 @@
 import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import * as XLSX from "xlsx"
+import { trpc } from "@/lib/trpc-client"
 
 export default function XlsxPreviewPage() {
   const searchParams = useSearchParams()
   const src = searchParams.get("src") || ""
   const [html, setHtml] = useState<string>("")
   const [error, setError] = useState<string>("")
+  const proxyQuery = trpc.proxyFile.fetch.useQuery(
+    { src, download: false },
+    { enabled: Boolean(src) },
+  )
 
   useEffect(() => {
     let cancelled = false
     const run = async () => {
-      if (!src) return
+      if (!src || !proxyQuery.data?.data) return
       try {
-        const proxyUrl = `/api/proxy-file?src=${encodeURIComponent(src)}`
-        const resp = await fetch(proxyUrl)
-        if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`)
-        const buf = await resp.arrayBuffer()
-        const wb = XLSX.read(buf, { type: "array" })
+        const binary = atob(proxyQuery.data.data)
+        const len = binary.length
+        const bytes = new Uint8Array(len)
+        for (let i = 0; i < len; i += 1) {
+          bytes[i] = binary.charCodeAt(i)
+        }
+        const wb = XLSX.read(bytes, { type: "array" })
         const ws = wb.Sheets[wb.SheetNames[0]]
         const html = XLSX.utils.sheet_to_html(ws, { header: "", footer: "" })
         if (!cancelled) setHtml(html)
@@ -31,7 +38,13 @@ export default function XlsxPreviewPage() {
     return () => {
       cancelled = true
     }
-  }, [src])
+  }, [src, proxyQuery.data])
+
+  useEffect(() => {
+    if (proxyQuery.error) {
+      setError(proxyQuery.error.message || "Failed to preview file")
+    }
+  }, [proxyQuery.error])
 
   return (
     <div

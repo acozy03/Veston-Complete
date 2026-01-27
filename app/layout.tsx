@@ -7,6 +7,7 @@ import "./globals.css"
 import "@crayonai/react-ui/styles/index.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import AuthGate from "@/components/auth-gate"
+import TrpcProvider from "@/components/trpc-provider"
 
 export const metadata: Metadata = {
   title: "Veston | Radiology Assistant",
@@ -24,16 +25,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           GeistMono.variable,
         ].join(" ")}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"           
-          enableSystem
-          disableTransitionOnChange
-          storageKey="veston-theme"
-        >
-          <AuthGate>{children}</AuthGate>
-          <Analytics />
-        </ThemeProvider>
+        <TrpcProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"           
+            enableSystem
+            disableTransitionOnChange
+            storageKey="veston-theme"
+          >
+            <AuthGate>{children}</AuthGate>
+            <Analytics />
+          </ThemeProvider>
+        </TrpcProvider>
       </body>
     </html>
   )

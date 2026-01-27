@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client"
 import type { ChartSpec } from "@/lib/visualization"
 import { prepareChartSpecs, stringifyForPrompt } from "@/lib/visualization"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { trpc } from "@/lib/trpc-client"
 
 export type Source = {
   url: string
@@ -59,24 +60,6 @@ const placeholderTitle = (content: string) => {
   return "New Chat"
 }
 
-const classifyVisualizationNeed = async (question: string) => {
-  try {
-    console.log("[visuals] classify:start", question)
-    const res = await fetch("/api/visuals/classify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
-    })
-    const parsed = await res.json().catch(() => null)
-    const shouldVisualize = Boolean((parsed as any)?.shouldVisualize)
-    console.log("[visuals] classify:result", shouldVisualize, parsed)
-    return shouldVisualize
-  } catch (error) {
-    console.warn("[visuals] classify:failed", error)
-    return false
-  }
-}
-
 const extractChartsFromPayload = (payload: unknown): ChartSpec[] => {
   if (payload && typeof payload === "object") {
     const obj = payload as any
@@ -84,44 +67,6 @@ const extractChartsFromPayload = (payload: unknown): ChartSpec[] => {
     if (Array.isArray(obj.charts)) return prepareChartSpecs(obj.charts)
   }
   return []
-}
-
-const generateVisualizations = async (params: { question: string; answer: string; raw?: unknown }) => {
-  try {
-    console.log("[visuals] generate:start", { question: params.question })
-    const res = await fetch("/api/visuals/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        question: params.question,
-        answer: params.answer,
-        raw: params.raw,
-        preview: stringifyForPrompt(params.raw, 2000),
-      }),
-    })
-    const parsed = await res.json().catch(() => null)
-    const charts = prepareChartSpecs((parsed as any)?.charts || (parsed as any)?.visualizations)
-    console.log("[visuals] generate:result", charts.length)
-    console.log("[visuals] generate:charts", charts)
-    return charts
-  } catch (error) {
-    console.warn("[visuals] generate:failed", error)
-    return []
-  }
-}
-
-const persistVisualizations = async (params: { chatId?: string; messageId?: string; charts?: ChartSpec[] }) => {
-  const { chatId, messageId, charts } = params
-  if (!chatId || !messageId || !charts?.length) return
-  try {
-    await fetch("/api/visuals/store", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chatId, messageId, visualizations: charts }),
-    })
-  } catch (error) {
-    console.warn("[visuals] store:failed", error)
-  }
 }
 
 type ChatInterfaceProps = {
@@ -160,6 +105,53 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
   const [loadingChatId, setLoadingChatId] = useState<string | null>(null)
 
   const supabase = useMemo(() => createClient(), [])
+  const classifyMutation = trpc.visuals.classify.useMutation()
+  const generateMutation = trpc.visuals.generate.useMutation()
+  const storeMutation = trpc.visuals.store.useMutation()
+  const chatMutation = trpc.chat.ask.useMutation()
+  const titleMutation = trpc.chat.title.useMutation()
+
+  const classifyVisualizationNeed = async (question: string) => {
+    try {
+      console.log("[visuals] classify:start", question)
+      const parsed = await classifyMutation.mutateAsync({ question })
+      const shouldVisualize = Boolean(parsed?.shouldVisualize)
+      console.log("[visuals] classify:result", shouldVisualize, parsed)
+      return shouldVisualize
+    } catch (error) {
+      console.warn("[visuals] classify:failed", error)
+      return false
+    }
+  }
+
+  const generateVisualizations = async (params: { question: string; answer: string; raw?: unknown }) => {
+    try {
+      console.log("[visuals] generate:start", { question: params.question })
+      const parsed = await generateMutation.mutateAsync({
+        question: params.question,
+        answer: params.answer,
+        raw: params.raw,
+        preview: stringifyForPrompt(params.raw, 2000),
+      })
+      const charts = prepareChartSpecs((parsed as any)?.charts || (parsed as any)?.visualizations)
+      console.log("[visuals] generate:result", charts.length)
+      console.log("[visuals] generate:charts", charts)
+      return charts
+    } catch (error) {
+      console.warn("[visuals] generate:failed", error)
+      return []
+    }
+  }
+
+  const persistVisualizations = async (params: { chatId?: string; messageId?: string; charts?: ChartSpec[] }) => {
+    const { chatId, messageId, charts } = params
+    if (!chatId || !messageId || !charts?.length) return
+    try {
+      await storeMutation.mutateAsync({ chatId, messageId, visualizations: charts })
+    } catch (error) {
+      console.warn("[visuals] store:failed", error)
+    }
+  }
 
   // Hero title options; one picked randomly per load
   const heroTitles = [
@@ -290,13 +282,9 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     updateChatTitleState(chatId, { titleStatus: "pending", pendingTitle: placeholder })
 
     try {
-      const res = await fetch("/api/chat/title", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, fallback: placeholder }),
-      })
-      const parsed = (await res.json().catch(() => ({}))) as { title?: string | null }
-      const generatedTitle = typeof parsed?.title === "string" && parsed.title.trim() ? parsed.title.trim() : placeholder
+      const parsed = await titleMutation.mutateAsync({ message, fallback: placeholder })
+      const generatedTitle =
+        typeof parsed?.title === "string" && parsed.title.trim() ? parsed.title.trim() : placeholder
 
       updateChatTitleState(chatId, { titleStatus: "streaming", pendingTitle: generatedTitle })
 
@@ -826,42 +814,15 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       }
       // Client-side debug log for visibility in devtools
       try { console.log("POST /api/chat payload", payload) } catch {}
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        // Only send chatId if we know the server-side id
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      })
-
-      const responseText = await response.text()
-      let parsed: unknown
-
-      try {
-        parsed = JSON.parse(responseText)
-      } catch {
-        parsed = null
-      }
+      const parsed = await chatMutation.mutateAsync(payload)
       const parsedJson = typeof parsed === "object" && parsed !== null ? (parsed as any) : null
 
-      if (!response.ok) {
-        const errorMessage =
-          typeof parsed === "object" && parsed !== null && "error" in parsed && typeof (parsed as { error: unknown }).error === "string"
-            ? (parsed as { error: string }).error
-            : "The workflow gateway returned an error."
-        throw new Error(errorMessage)
-      }
+      const replyText = typeof parsed?.reply === "string" ? parsed.reply : ""
 
-      const replyText =
-        typeof parsed === "object" && parsed !== null && "reply" in parsed && typeof (parsed as { reply: unknown }).reply === "string"
-          ? (parsed as { reply: string }).reply
-          : responseText
-
-      const serverAssistantId = typeof parsedJson?.assistantMessageId === "string" && parsedJson.assistantMessageId
-        ? (parsedJson.assistantMessageId as string)
-        : undefined
+      const serverAssistantId =
+        typeof parsedJson?.assistantMessageId === "string" && parsedJson.assistantMessageId
+          ? (parsedJson.assistantMessageId as string)
+          : undefined
       const serverCharts = extractChartsFromPayload(parsed)
       const rawPayload = typeof parsed === "object" && parsed !== null ? (parsed as any).raw : undefined
 
@@ -917,12 +878,12 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       } catch {}
 
       const targetChatId =
-        (typeof parsedJson?.chatId === "string" && parsedJson.chatId)
-          || serverChatId
-          || requestChatId
-          || activeChat?.id
-          || currentChatId
-          || ""
+        (typeof parsedJson?.chatId === "string" && parsedJson.chatId) ||
+        serverChatId ||
+        requestChatId ||
+        activeChat?.id ||
+        currentChatId ||
+        ""
 
       const candidateChatIds = Array.from(
         new Set([targetChatId, activeChat?.id, currentChatId].filter(Boolean) as string[]),
