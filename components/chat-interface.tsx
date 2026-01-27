@@ -35,6 +35,20 @@ export type Message = {
 type TitleStatus = "ready" | "pending" | "streaming"
 type ModelProvider = "openai" | "gemini"
 
+type ChatRow = {
+  id: string
+  title: string | null
+  created_at: string
+  updated_at: string
+}
+
+type MessageRow = {
+  id: string
+  role: string
+  content: string
+  created_at: string
+}
+
 export type Chat = {
   id: string
   title: string
@@ -302,7 +316,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         const constrainedQuery = userId ? query.eq("user_id", userId) : query
         void constrainedQuery
           .select("id")
-          .then(({ data, error }) => {
+          .then(({ data, error }: { data: Array<{ id: string }> | null; error: unknown }) => {
             if (error) {
               console.warn("[chat:title] update failed", error)
               return
@@ -358,18 +372,19 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           console.error("Failed to load chats", error)
           return
         }
-        const mapped: Chat[] = (data || []).map((c) => ({
-          id: c.id as string,
-          title: (c.title as string) || "New Chat",
+        const chatRows = (data || []) as ChatRow[]
+        const mapped: Chat[] = chatRows.map((c) => ({
+          id: String(c.id),
+          title: c.title || "New Chat",
           messages: [],
-          createdAt: new Date(c.created_at as string),
+          createdAt: new Date(c.created_at),
           titleStatus: "ready" as const,
         }))
         setChats(mapped)
         // Load a short preview (last message) for each chat to enable search/snippets
         void loadPreviews(mapped)
         const preferredChatId =
-          (currentChatId && mapped.some((c) => c.id === currentChatId) && currentChatId) || mapped[0]?.id || ""
+          (currentChatId && mapped.some((c: Chat) => c.id === currentChatId) && currentChatId) || mapped[0]?.id || ""
         if (preferredChatId) {
           selectChat(preferredChatId, { serverId: preferredChatId })
           await loadMessages(preferredChatId)
@@ -476,7 +491,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
   const loadPreviews = async (items: Chat[]) => {
     await Promise.all(
-      items.map(async (c) => {
+      items.map(async (c: Chat) => {
         const { data } = await supabase
           .from("messages")
           .select("content, created_at")
@@ -507,10 +522,12 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       return
     }
 
+    const messageRows = (data || []) as MessageRow[]
+
     // Attempt to fetch sources for these messages (if table exists and RLS allows)
     let sourcesByMessage: Record<string, Source[]> = {}
     try {
-      const ids = (data || []).map((m) => m.id as string)
+      const ids = messageRows.map((m: MessageRow) => m.id)
       if (ids.length > 0) {
         const { data: srcRows } = await supabase
           .from("message_sources")
@@ -538,7 +555,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
 
     let visualsByMessage: Record<string, ChartSpec[]> = {}
     try {
-      const ids = (data || []).map((m) => m.id as string)
+      const ids = messageRows.map((m: MessageRow) => m.id)
       if (ids.length > 0) {
         const { data: vizRows } = await supabase
           .from("message_visualizations")
@@ -557,14 +574,14 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       // swallow; table may not exist yet or RLS not configured
     }
 
-    const msgs: Message[] = (data || []).map((m) => ({
-      id: m.id as string,
-      role: (m.role as "user" | "assistant" | "system" | "tool") === "assistant" ? "assistant" : "user",
-      content: m.content as string,
-      timestamp: new Date(m.created_at as string),
-      sources: sourcesByMessage[String(m.id)] || undefined,
-      visuals: visualsByMessage[String(m.id)] || undefined,
-      visualStatus: visualsByMessage[String(m.id)]?.length ? "ready" : undefined,
+    const msgs: Message[] = messageRows.map((m: MessageRow) => ({
+      id: m.id,
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: m.content,
+      timestamp: new Date(m.created_at),
+      sources: sourcesByMessage[m.id] || undefined,
+      visuals: visualsByMessage[m.id] || undefined,
+      visualStatus: visualsByMessage[m.id]?.length ? "ready" : undefined,
     }))
     if (msgs.length > 0) {
       newlyCreatedChatIds.current.delete(chatId)

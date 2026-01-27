@@ -174,6 +174,9 @@ try {
   console.log('[chat] unwrapped object keys:', obj ? Object.keys(obj) : null)
 } catch {}
 
+const getString = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined
+
 let reply: string;
 let sources: Array<{ url: string; title?: string; snippet?: string; score?: number }> | undefined;
 let visualizations: unknown;
@@ -183,9 +186,9 @@ if (Array.isArray(workflowJson)) {
   reply = arrMessage || workflowText;
 } else {
   reply =
-    (obj?.reply && typeof obj.reply === "string" && obj.reply) ||
-    (obj?.message && typeof obj.message === "string" && obj.message) ||
-    (obj?.response && typeof obj.response === "string" && obj.response) ||
+    getString(obj?.reply) ||
+    getString(obj?.message) ||
+    getString(obj?.response) ||
     (typeof workflowText === "string" ? workflowText : JSON.stringify(workflowJson));
 
   const rawSources = Array.isArray((obj as any)?.sources) ? (obj as any).sources : undefined

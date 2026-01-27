@@ -30,7 +30,7 @@ const isXlsxUrl = (url: string) =>
   /filename=.*\.xlsx/i.test(url) ||
   /application%2Fvnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/i.test(url)
 
-const decodeBase64 = (data: string): Uint8Array<ArrayBuffer> => {
+const decodeBase64 = (data: string): Uint8Array => {
   const binary = atob(data)
   const len = binary.length
   const buffer = new ArrayBuffer(len)
@@ -57,7 +57,7 @@ const inferFilename = (url: string, contentType?: string | null) => {
 }
 
 const triggerDownload = (bytes: Uint8Array, contentType: string | undefined, filename: string) => {
-  const blob = new Blob([bytes], { type: contentType || "application/octet-stream" })
+  const blob = new Blob([bytes.buffer], { type: contentType || "application/octet-stream" })
   const url = window.URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
