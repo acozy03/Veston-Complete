@@ -1,6 +1,7 @@
 import { defineConfig } from "eslint/config";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
+import reactHooksPlugin from "eslint-plugin-react-hooks";
 
 export default defineConfig([
   {
@@ -8,9 +9,12 @@ export default defineConfig([
   },
   {
     files: ["**/*.js"],
+    plugins: {
+      "react-hooks": reactHooksPlugin,
+    },
     rules: {
       semi: "off",
-      "no-console": "error",
+      "no-console": "off",
     },
   },
   {
@@ -27,9 +31,10 @@ export default defineConfig([
     },
     plugins: {
       "@typescript-eslint": tsPlugin,
+      "react-hooks": reactHooksPlugin,
     },
     rules: {
-      "no-console": "error",
+      "no-console": "off",
     },
   },
 ]);

@@ -83,6 +83,42 @@ const extractChartsFromPayload = (payload: unknown): ChartSpec[] => {
   return []
 }
 
+const playRingSound = () => {
+  if (typeof window === "undefined") return
+  const AudioContextClass =
+    window.AudioContext ||
+    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AudioContextClass) return
+
+  const context = new AudioContextClass()
+  const masterGain = context.createGain()
+  masterGain.gain.setValueAtTime(0.6, context.currentTime)
+  masterGain.connect(context.destination)
+
+  const scheduleTone = (frequency: number, start: number, duration: number) => {
+    const oscillator = context.createOscillator()
+    const gainNode = context.createGain()
+    oscillator.type = "sine"
+    oscillator.frequency.setValueAtTime(frequency, start)
+    gainNode.gain.setValueAtTime(0.0001, start)
+    gainNode.gain.exponentialRampToValueAtTime(0.18, start + 0.02)
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, start + duration)
+    oscillator.connect(gainNode)
+    gainNode.connect(masterGain)
+    oscillator.start(start)
+    oscillator.stop(start + duration)
+  }
+
+  const now = context.currentTime + 0.02
+  scheduleTone(880, now, 0.18)
+  scheduleTone(1320, now + 0.22, 0.2)
+  scheduleTone(990, now + 0.5, 0.18)
+
+  window.setTimeout(() => {
+    void context.close()
+  }, 1000)
+}
+
 type ChatInterfaceProps = {
   initialChats?: Chat[]
   initialChatId?: string
@@ -368,7 +404,6 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
           .eq("user_email", emailForQuery)
           .order("updated_at", { ascending: false })
         if (error) {
-          // eslint-disable-next-line no-console
           console.error("Failed to load chats", error)
           return
         }
@@ -392,7 +427,6 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       }
     }
     void load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Pick a random hero title on mount
@@ -400,7 +434,6 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     const idx = Math.floor(Math.random() * heroTitles.length)
     const title = heroTitles[idx](user?.name)
     setHeroTitle(title)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Hydrate current chat from persisted sources (URL first, then localStorage)
@@ -448,7 +481,6 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         setServerChatId("")
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chats, currentChatId, forceHeroMode, initialChatId, searchParams, serverChatId, storageKey])
 
   // Load persisted chat mode preference
@@ -517,7 +549,6 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
       .eq("user_email", userEmail || "")
       .order("created_at", { ascending: true })
     if (error) {
-      // eslint-disable-next-line no-console
       console.error("Failed to load messages", error)
       return
     }
@@ -650,7 +681,6 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
         void loadMessages(fallbackId)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chats, currentChatId, forceHeroMode])
 
   useEffect(() => {
@@ -715,7 +745,6 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentChatId])
 
   const handleNewChat = async () => {
@@ -877,6 +906,7 @@ export default function ChatInterface({ initialChats = [], initialChatId = "", i
             : chat,
         ),
       )
+      playRingSound()
 
       // Capture server chat id if provided and reconcile local temp chat
       try {
