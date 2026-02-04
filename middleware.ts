@@ -39,13 +39,20 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Skip domain check for auth callback and unauthorized page
-  if (request.nextUrl.pathname.startsWith('/auth/callback') || 
-      request.nextUrl.pathname.startsWith('/auth/unauthorized')) {
+  const pathname = request.nextUrl.pathname
+
+  // Skip auth guard and domain checks for auth routes to avoid redirect loops
+  if (pathname.startsWith('/auth/')) {
     return response
   }
 
   const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user && pathname !== '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
+    return NextResponse.redirect(url)
+  }
 
   // If user is logged in, check domain restriction
   if (user?.email) {
