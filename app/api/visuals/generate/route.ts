@@ -30,6 +30,7 @@ export async function POST(req: Request) {
             {
               text: [
                 "You create concise JSON chart specs for Recharts with a top-level `charts` array.",
+                "Do not output patientId information into any chart",
                 "Each chart has id, type (line|bar|area|pie|sankey), title, description, data (array of objects), xKey, yKeys (array of {key,label,color}), categoryKey, valueKey.",
                 "Sankey charts instead use nodes (array of {id,name,color,description}) and links (array of {source,target,value,color}) to describe flows.",
                 "When type is sankey, do not include data/xKey/yKeys/categoryKey/valueKey; provide only nodes and links.",
