@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServerSupabase } from "@/lib/supabase/server"
+import { isAllowedDomain } from "@/lib/auth-utils"
 
 const normalizeVisualizations = (value: unknown): unknown | null => {
   if (Array.isArray(value)) return value
@@ -35,6 +36,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const user = userRes.user
+
+    // Domain restriction check
+    if (!isAllowedDomain(user.email)) {
+      console.warn(`Unauthorized API access attempt from domain: ${user.email}`)
+      return NextResponse.json({ error: "Unauthorized domain" }, { status: 403 })
+    }
 
     const { data: messageRow, error: messageErr } = await supabase
       .from('messages')
