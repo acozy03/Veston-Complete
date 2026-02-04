@@ -38,14 +38,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${origin}/?error=auth_exchange_failed`)
     }
 
+    if (!data?.user?.email) {
+      console.warn('Unauthorized login attempt: missing email')
+      await supabase.auth.signOut()
+      return NextResponse.redirect(
+        `${origin}/auth/unauthorized?error=missing_email`
+      )
+    }
+
     // Check domain restriction
-    if (data?.user?.email) {
-      console.log('User authenticated via route handler:', data.user.email)
-      if (!isAllowedDomain(data.user.email)) {
-        console.warn(`Unauthorized domain login attempt: ${data.user.email}`)
-        await supabase.auth.signOut()
-        return NextResponse.redirect(`${origin}/auth/unauthorized`)
-      }
+    console.log('User authenticated via route handler:', data.user.email)
+    if (!isAllowedDomain(data.user.email)) {
+      console.warn(`Unauthorized domain login attempt: ${data.user.email}`)
+      await supabase.auth.signOut()
+      return NextResponse.redirect(`${origin}/auth/unauthorized`)
     }
   }
 
