@@ -2,6 +2,7 @@ import { initTRPC, TRPCError } from "@trpc/server"
 import { isIP } from "node:net"
 import { z } from "zod"
 import { createServerSupabase } from "@/lib/supabase/server"
+import { isAllowedDomain } from "@/lib/auth-utils"
 import { prepareChartSpecs, stringifyForPrompt } from "@/lib/visualization"
 import { VertexAI } from "@google-cloud/vertexai"
 
@@ -153,6 +154,12 @@ export const appRouter = t.router({
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Unauthorized" })
         }
         const user = userRes.user
+
+        // Domain restriction check
+        if (!isAllowedDomain(user.email)) {
+          console.warn(`Unauthorized tRPC access attempt from domain: ${user.email}`)
+          throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized domain" })
+        }
 
         let effectiveChatId = chatId
         if (!effectiveChatId) {

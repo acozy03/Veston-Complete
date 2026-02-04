@@ -11,7 +11,7 @@ export default function AuthGate({ children }: Props) {
   useEffect(() => {
     const run = async () => {
       if (typeof window === 'undefined') return
-      if (window.location.pathname.startsWith('/auth/callback')) return
+      if (window.location.pathname.startsWith('/auth/')) return
 
       const supabase = createClient()
       const { data } = await supabase.auth.getSession()
