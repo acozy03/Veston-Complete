@@ -7,7 +7,14 @@ import { isAllowedDomain } from '@/lib/auth-utils'
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
-  const origin = requestUrl.origin
+
+  const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '')
+  const forwardedHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host')
+  const forwardedProto = request.headers.get('x-forwarded-proto') ?? requestUrl.protocol.replace(':', '')
+  const forwardedOrigin = forwardedHost
+    ? `${forwardedProto}://${forwardedHost}`
+    : requestUrl.origin
+  const origin = configuredOrigin || forwardedOrigin
 
   if (code) {
     const cookieStore = await cookies()
