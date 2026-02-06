@@ -2,6 +2,7 @@ import { initTRPC, TRPCError } from "@trpc/server"
 import { isIP } from "node:net"
 import { z } from "zod"
 import { createServerSupabase } from "@/lib/supabase/server"
+import { createAdminSupabase } from "@/lib/supabase/admin"
 import { isAllowedDomain } from "@/lib/auth-utils"
 import { prepareChartSpecs, stringifyForPrompt } from "@/lib/visualization"
 import { VertexAI } from "@google-cloud/vertexai"
@@ -111,6 +112,86 @@ const buildFallbackTitle = (value?: string) => {
   return "New Chat"
 }
 
+const PLACEHOLDER_KEY_PATTERN = /^patientId_\d+$/
+const PATIENT_ID_MAP_TABLE = "patient_id_maps"
+const PATIENT_ID_MAP_TTL_MS = 5 * 60 * 1000
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+const sanitizePatientIdMap = (value: unknown): Record<string, string> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    console.log("[patientIdMap] received invalid payload for map; defaulting to empty", {
+      valueType: Array.isArray(value) ? "array" : typeof value,
+    })
+    return {}
+  }
+
+  const rawEntries = Object.entries(value)
+  const out: Record<string, string> = {}
+  for (const [key, raw] of rawEntries) {
+    if (!PLACEHOLDER_KEY_PATTERN.test(key)) continue
+    if (typeof raw !== "string") continue
+    const trimmed = raw.trim()
+    if (!trimmed) continue
+    out[key] = trimmed
+  }
+
+  console.log("[patientIdMap] sanitize result", {
+    incomingEntries: rawEntries.length,
+    acceptedEntries: Object.keys(out).length,
+    acceptedKeys: Object.keys(out),
+    map: out,
+  })
+  return out
+}
+
+const replacePatientPlaceholdersInText = (text: string, patientIdMap: Record<string, string>): string => {
+  if (!text) return text
+  const entries = Object.entries(patientIdMap)
+  if (entries.length === 0) return text
+
+  let out = text
+  for (const [placeholder, rawPatientId] of entries) {
+    const pattern = new RegExp(`\\b${escapeRegExp(placeholder)}\\b`, "g")
+    const hasMatch = pattern.test(out)
+    pattern.lastIndex = 0
+
+    if (!hasMatch) {
+      console.log("[patientIdMap] replacement skipped (placeholder missing)", { placeholder })
+      continue
+    }
+
+    const before = out
+    out = out.replace(pattern, rawPatientId)
+    console.log("[patientIdMap] replacement applied", {
+      placeholder,
+      rawPatientId,
+      inputPreview: before.slice(0, 200),
+      outputPreview: out.slice(0, 200),
+    })
+  }
+  return out
+}
+
+
+const replacePatientPlaceholdersDeep = (value: unknown, patientIdMap: Record<string, string>): unknown => {
+  if (typeof value === "string") {
+    return replacePatientPlaceholdersInText(value, patientIdMap)
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => replacePatientPlaceholdersDeep(entry, patientIdMap))
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+        key,
+        replacePatientPlaceholdersDeep(nestedValue, patientIdMap),
+      ]),
+    )
+  }
+  return value
+}
+
 export const appRouter = t.router({
   chat: t.router({
     ask: t.procedure
@@ -143,6 +224,13 @@ export const appRouter = t.router({
           studyAnalysis,
           noWorkflow,
         } = input
+
+        console.log("[chat.ask] received payload", {
+          chatId,
+          mode,
+          fast: fast === true,
+          slow: slow === true,
+        })
 
         if (!question || !question.trim()) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Question is required" })
@@ -211,8 +299,14 @@ export const appRouter = t.router({
           }),
         })
 
-        const workflowText = await workflowResponse.text()
+        let workflowText = await workflowResponse.text()
         let workflowJson: unknown = null
+        const executionId =
+          workflowResponse.headers.get("execution-id") || workflowResponse.headers.get("x-execution-id")
+        console.log("[chat.ask] workflow response headers", {
+          executionId,
+          status: workflowResponse.status,
+        })
 
         try {
           workflowJson = JSON.parse(workflowText)
@@ -295,6 +389,72 @@ export const appRouter = t.router({
               : undefined
           if (rawVisualizations) {
             visualizations = rawVisualizations
+          }
+        }
+
+        const adminSupabase = createAdminSupabase()
+        const cutoff = new Date(Date.now() - PATIENT_ID_MAP_TTL_MS).toISOString()
+        const cleanupResult = await adminSupabase
+          .from(PATIENT_ID_MAP_TABLE)
+          .delete()
+          .lt("created_at", cutoff)
+        if (cleanupResult.error) {
+          console.warn("[patientIdMap] cleanup failed", cleanupResult.error)
+        } else {
+          console.log("[patientIdMap] cleanup complete", { cutoff })
+        }
+
+        let safePatientIdMap: Record<string, string> = {}
+        if (executionId) {
+          const { data: mapRow, error: mapErr } = await adminSupabase
+            .from(PATIENT_ID_MAP_TABLE)
+            .select("patient_id_map")
+            .eq("execution_id", executionId)
+            .maybeSingle()
+          if (mapErr) {
+            console.warn("[patientIdMap] lookup failed", mapErr)
+          } else {
+            safePatientIdMap = sanitizePatientIdMap(mapRow?.patient_id_map)
+            console.log("[patientIdMap] lookup result", {
+              executionId,
+              hasMap: Object.keys(safePatientIdMap).length > 0,
+              mapKeys: Object.keys(safePatientIdMap),
+            })
+          }
+        } else {
+          console.log("[patientIdMap] missing execution id; skipping lookup")
+        }
+
+        console.log("[chat.ask] replacement attempt starting", {
+          replyPreview: typeof reply === "string" ? reply.slice(0, 200) : null,
+          sourcesCount: Array.isArray(sources) ? sources.length : 0,
+          hasVisualizations: Boolean(visualizations),
+          mapKeys: Object.keys(safePatientIdMap),
+        })
+        const beforeReply = reply
+        reply = replacePatientPlaceholdersInText(reply, safePatientIdMap)
+        sources = replacePatientPlaceholdersDeep(sources, safePatientIdMap) as typeof sources
+        visualizations = replacePatientPlaceholdersDeep(visualizations, safePatientIdMap)
+        workflowJson = replacePatientPlaceholdersDeep(workflowJson, safePatientIdMap)
+        if (typeof workflowText === "string") {
+          workflowText = replacePatientPlaceholdersInText(workflowText, safePatientIdMap)
+        }
+        console.log("[chat.ask] replacement output", {
+          replyChanged: beforeReply !== reply,
+          replyPreviewAfter: typeof reply === "string" ? reply.slice(0, 200) : null,
+          sourcesCountAfter: Array.isArray(sources) ? sources.length : 0,
+          hasVisualizationsAfter: Boolean(visualizations),
+        })
+
+        if (executionId) {
+          const deleteResult = await adminSupabase
+            .from(PATIENT_ID_MAP_TABLE)
+            .delete()
+            .eq("execution_id", executionId)
+          if (deleteResult.error) {
+            console.warn("[patientIdMap] delete after use failed", deleteResult.error)
+          } else {
+            console.log("[patientIdMap] deleted map after use", { executionId })
           }
         }
 
