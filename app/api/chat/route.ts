@@ -15,9 +15,6 @@ const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\
 
 const sanitizePatientIdMap = (value: unknown): Record<string, string> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    console.log("[patientIdMap] received invalid payload for map; defaulting to empty", {
-      valueType: Array.isArray(value) ? "array" : typeof value,
-    })
     return {}
   }
 
@@ -31,12 +28,6 @@ const sanitizePatientIdMap = (value: unknown): Record<string, string> => {
     out[key] = trimmed
   }
 
-  console.log("[patientIdMap] sanitize result", {
-    incomingEntries: rawEntries.length,
-    acceptedEntries: Object.keys(out).length,
-    acceptedKeys: Object.keys(out),
-    map: out,
-  })
   return out
 }
 
@@ -52,18 +43,10 @@ const replacePatientPlaceholdersInText = (text: string, patientIdMap: Record<str
     pattern.lastIndex = 0
 
     if (!hasMatch) {
-      console.log("[patientIdMap] replacement skipped (placeholder missing)", { placeholder })
       continue
     }
 
-    const before = out
     out = out.replace(pattern, rawPatientId)
-    console.log("[patientIdMap] replacement applied", {
-      placeholder,
-      rawPatientId,
-      inputPreview: before.slice(0, 200),
-      outputPreview: out.slice(0, 200),
-    })
   }
   return out
 }
@@ -309,63 +292,31 @@ if (Array.isArray(workflowJson)) {
   }
 }
 
-const adminSupabase = createAdminSupabase()
-const cutoff = new Date(Date.now() - PATIENT_ID_MAP_TTL_MS).toISOString()
-const cleanupResult = await adminSupabase.from(PATIENT_ID_MAP_TABLE).delete().lt("created_at", cutoff)
-if (cleanupResult.error) {
-  console.warn("[patientIdMap] cleanup failed", cleanupResult.error)
-} else {
-  console.log("[patientIdMap] cleanup complete", { cutoff })
-}
+if (studyAnalysis === true) {
+  const adminSupabase = createAdminSupabase()
+  const cutoff = new Date(Date.now() - PATIENT_ID_MAP_TTL_MS).toISOString()
+  await adminSupabase.from(PATIENT_ID_MAP_TABLE).delete().lt("created_at", cutoff)
 
-let safePatientIdMap: Record<string, string> = {}
-if (executionId) {
-  const { data: mapRow, error: mapErr } = await adminSupabase
-    .from(PATIENT_ID_MAP_TABLE)
-    .select("patient_id_map")
-    .eq("execution_id", executionId)
-    .maybeSingle()
-  if (mapErr) {
-    console.warn("[patientIdMap] lookup failed", mapErr)
-  } else {
+  let safePatientIdMap: Record<string, string> = {}
+  if (executionId) {
+    const { data: mapRow } = await adminSupabase
+      .from(PATIENT_ID_MAP_TABLE)
+      .select("patient_id_map")
+      .eq("execution_id", executionId)
+      .maybeSingle()
     safePatientIdMap = sanitizePatientIdMap(mapRow?.patient_id_map)
-    console.log("[patientIdMap] lookup result", {
-      executionId,
-      hasMap: Object.keys(safePatientIdMap).length > 0,
-      mapKeys: Object.keys(safePatientIdMap),
-    })
   }
-} else {
-  console.log("[patientIdMap] missing execution id; skipping lookup")
-}
 
-console.log('[api/chat] replacement attempt starting', {
-  replyPreview: typeof reply === 'string' ? reply.slice(0, 200) : null,
-  sourcesCount: Array.isArray(sources) ? sources.length : 0,
-  hasVisualizations: Boolean(visualizations),
-  mapKeys: Object.keys(safePatientIdMap),
-})
-const beforeReply = reply
-reply = replacePatientPlaceholdersInText(reply, safePatientIdMap)
-sources = replacePatientPlaceholdersDeep(sources, safePatientIdMap) as typeof sources
-visualizations = replacePatientPlaceholdersDeep(visualizations, safePatientIdMap)
-workflowJson = replacePatientPlaceholdersDeep(workflowJson, safePatientIdMap)
-if (typeof workflowText === "string") {
-  workflowText = replacePatientPlaceholdersInText(workflowText, safePatientIdMap)
-}
-console.log('[api/chat] replacement output', {
-  replyChanged: beforeReply !== reply,
-  replyPreviewAfter: typeof reply === 'string' ? reply.slice(0, 200) : null,
-  sourcesCountAfter: Array.isArray(sources) ? sources.length : 0,
-  hasVisualizationsAfter: Boolean(visualizations),
-})
+  reply = replacePatientPlaceholdersInText(reply, safePatientIdMap)
+  sources = replacePatientPlaceholdersDeep(sources, safePatientIdMap) as typeof sources
+  visualizations = replacePatientPlaceholdersDeep(visualizations, safePatientIdMap)
+  workflowJson = replacePatientPlaceholdersDeep(workflowJson, safePatientIdMap)
+  if (typeof workflowText === "string") {
+    workflowText = replacePatientPlaceholdersInText(workflowText, safePatientIdMap)
+  }
 
-if (executionId) {
-  const deleteResult = await adminSupabase.from(PATIENT_ID_MAP_TABLE).delete().eq("execution_id", executionId)
-  if (deleteResult.error) {
-    console.warn("[patientIdMap] delete after use failed", deleteResult.error)
-  } else {
-    console.log("[patientIdMap] deleted map after use", { executionId })
+  if (executionId) {
+    await adminSupabase.from(PATIENT_ID_MAP_TABLE).delete().eq("execution_id", executionId)
   }
 }
 

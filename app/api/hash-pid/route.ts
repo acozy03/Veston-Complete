@@ -62,22 +62,11 @@ export async function POST(request: Request) {
         { onConflict: "execution_id" },
       )
     if (upsertErr) {
-      console.error("[hash-pid] failed to store patientId map", upsertErr)
       return NextResponse.json({ error: "Failed to store patientId map" }, { status: 500 })
     }
 
     const cutoff = new Date(Date.now() - PATIENT_ID_MAP_TTL_MS).toISOString()
-    const cleanupResult = await adminSupabase.from(PATIENT_ID_MAP_TABLE).delete().lt("created_at", cutoff)
-    if (cleanupResult.error) {
-      console.warn("[hash-pid] cleanup failed", cleanupResult.error)
-    } else {
-      console.log("[hash-pid] cleanup complete", { cutoff })
-    }
-
-    console.log("[hash-pid] stored patientId map", {
-      executionId,
-      entries: Object.keys(patientIdMap).length,
-    })
+    await adminSupabase.from(PATIENT_ID_MAP_TABLE).delete().lt("created_at", cutoff)
 
     const tokenizedPayload = payload.map((entry) => {
       const tokenizedEntry: Record<string, unknown> = {}
@@ -93,7 +82,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, tokenizedPayload })
   } catch (error) {
-    console.error("[hash-pid] failed", error)
     return NextResponse.json({ error: "Failed to tokenize payload" }, { status: 500 })
   }
 }
