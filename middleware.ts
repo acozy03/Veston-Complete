@@ -40,6 +40,9 @@ export async function middleware(request: NextRequest) {
   )
 
   const pathname = request.nextUrl.pathname
+  if (pathname.startsWith('/api/hash-pid')) {
+    return response
+  }
 
   // Skip auth guard and domain checks for auth routes to avoid redirect loops
   if (pathname.startsWith('/auth/')) {

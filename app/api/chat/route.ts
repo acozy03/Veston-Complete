@@ -1,8 +1,74 @@
 import { NextResponse } from "next/server"
 import { createServerSupabase } from "@/lib/supabase/server"
+import { createAdminSupabase } from "@/lib/supabase/admin"
 import { isAllowedDomain } from "@/lib/auth-utils"
 
 const N8N_CLASSIFIER_URL = process.env.N8N_CLASSIFIER_URL
+
+
+
+const PLACEHOLDER_KEY_PATTERN = /^patientId_\d+$/
+const PATIENT_ID_MAP_TABLE = "patient_id_maps"
+const PATIENT_ID_MAP_TTL_MS = 5 * 60 * 1000
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+const sanitizePatientIdMap = (value: unknown): Record<string, string> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  const rawEntries = Object.entries(value)
+  const out: Record<string, string> = {}
+  for (const [key, raw] of rawEntries) {
+    if (!PLACEHOLDER_KEY_PATTERN.test(key)) continue
+    if (typeof raw !== "string") continue
+    const trimmed = raw.trim()
+    if (!trimmed) continue
+    out[key] = trimmed
+  }
+
+  return out
+}
+
+const replacePatientPlaceholdersInText = (text: string, patientIdMap: Record<string, string>): string => {
+  if (!text) return text
+  const entries = Object.entries(patientIdMap)
+  if (entries.length === 0) return text
+
+  let out = text
+  for (const [placeholder, rawPatientId] of entries) {
+    const pattern = new RegExp(`\\b${escapeRegExp(placeholder)}\\b`, "g")
+    const hasMatch = pattern.test(out)
+    pattern.lastIndex = 0
+
+    if (!hasMatch) {
+      continue
+    }
+
+    out = out.replace(pattern, rawPatientId)
+  }
+  return out
+}
+
+
+const replacePatientPlaceholdersDeep = (value: unknown, patientIdMap: Record<string, string>): unknown => {
+  if (typeof value === "string") {
+    return replacePatientPlaceholdersInText(value, patientIdMap)
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => replacePatientPlaceholdersDeep(entry, patientIdMap))
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+        key,
+        replacePatientPlaceholdersDeep(nestedValue, patientIdMap),
+      ]),
+    )
+  }
+  return value
+}
 
 const normalizeVisualizations = (value: unknown): unknown | null => {
   console.log(value); 
@@ -132,7 +198,13 @@ export async function POST(req: Request) {
       }),
     })
 
-    const workflowText = await workflowResponse.text()
+    let workflowText = await workflowResponse.text()
+    const executionId =
+      workflowResponse.headers.get("execution-id") || workflowResponse.headers.get("x-execution-id")
+    console.log("[api/chat] workflow response headers", {
+      executionId,
+      status: workflowResponse.status,
+    })
     try {
       console.log('[chat] workflow status:', workflowResponse.status)
       console.log('[chat] workflow raw text (first 1000 chars):', workflowText.slice(0, 1000))
@@ -217,6 +289,34 @@ if (Array.isArray(workflowJson)) {
       : undefined
   if (rawVisualizations) {
     visualizations = rawVisualizations
+  }
+}
+
+if (studyAnalysis === true) {
+  const adminSupabase = createAdminSupabase()
+  const cutoff = new Date(Date.now() - PATIENT_ID_MAP_TTL_MS).toISOString()
+  await adminSupabase.from(PATIENT_ID_MAP_TABLE).delete().lt("created_at", cutoff)
+
+  let safePatientIdMap: Record<string, string> = {}
+  if (executionId) {
+    const { data: mapRow } = await adminSupabase
+      .from(PATIENT_ID_MAP_TABLE)
+      .select("patient_id_map")
+      .eq("execution_id", executionId)
+      .maybeSingle()
+    safePatientIdMap = sanitizePatientIdMap(mapRow?.patient_id_map)
+  }
+
+  reply = replacePatientPlaceholdersInText(reply, safePatientIdMap)
+  sources = replacePatientPlaceholdersDeep(sources, safePatientIdMap) as typeof sources
+  visualizations = replacePatientPlaceholdersDeep(visualizations, safePatientIdMap)
+  workflowJson = replacePatientPlaceholdersDeep(workflowJson, safePatientIdMap)
+  if (typeof workflowText === "string") {
+    workflowText = replacePatientPlaceholdersInText(workflowText, safePatientIdMap)
+  }
+
+  if (executionId) {
+    await adminSupabase.from(PATIENT_ID_MAP_TABLE).delete().eq("execution_id", executionId)
   }
 }
 
