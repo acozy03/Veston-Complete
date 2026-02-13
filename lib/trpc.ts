@@ -5,23 +5,15 @@ import { createServerSupabase } from "@/lib/supabase/server"
 import { createAdminSupabase } from "@/lib/supabase/admin"
 import { isAllowedDomain } from "@/lib/auth-utils"
 import { prepareChartSpecs, stringifyForPrompt } from "@/lib/visualization"
-import { VertexAI } from "@google-cloud/vertexai"
-
+import OpenAI from "openai"
+// import { VertexAI } from "@google-cloud/vertexai"
 const t = initTRPC.create()
-
 const N8N_CLASSIFIER_URL = process.env.N8N_CLASSIFIER_URL
 
-const project = process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || "veston-complete"
-const location = process.env.GCP_LOCATION || "us-central1"
-const VISUAL_CLASSIFIER_MODEL = process.env.VISUAL_CLASSIFIER_MODEL || "gemini-2.5-flash"
-const VISUAL_GENERATOR_MODEL = process.env.VISUAL_GENERATOR_MODEL || "gemini-2.5-flash"
-const CHAT_TITLE_MODEL = process.env.CHAT_TITLE_MODEL || "gemini-2.5-flash"
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini"
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const CHAT_TITLE_TIMEOUT_MS = Number(process.env.CHAT_TITLE_TIMEOUT_MS || 8000)
 
-const vertexAI = new VertexAI({ project, location })
-const visualClassifierModel = vertexAI.getGenerativeModel({ model: VISUAL_CLASSIFIER_MODEL })
-const visualGeneratorModel = vertexAI.getGenerativeModel({ model: VISUAL_GENERATOR_MODEL })
-const chatTitleModel = vertexAI.getGenerativeModel({ model: CHAT_TITLE_MODEL })
 
 const TRUSTED_PROXY_HOSTS = (process.env.PROXY_FILE_ALLOWED_HOSTS ?? "")
   .split(",")
@@ -459,24 +451,20 @@ export const appRouter = t.router({
         }
 
         try {
-          const completionPromise = chatTitleModel.generateContent({
-            contents: [
+          // OPENAI IMPLEMENTATION
+          const completionPromise = openai.chat.completions.create({
+            model: OPENAI_MODEL,
+            messages: [
               {
                 role: "user",
-                parts: [
-                  {
-                    text: [
-                      "Create a concise, human-friendly chat title (max 8 words) for the first user message.",
-                      "Return only the title text without quotes or punctuation at the end.",
-                      `Message: ${message}`,
-                    ].join("\n"),
-                  },
-                ],
+                content: [
+                  "Create a concise, human-friendly chat title (max 8 words) for the first user message.",
+                  "Return only the title text without quotes or punctuation at the end.",
+                  `Message: ${message}`,
+                ].join("\n"),
               },
             ],
-            generationConfig: {
-              temperature: 0.4,
-            },
+            temperature: 0.4,
           })
 
           const completion = await Promise.race([
@@ -484,11 +472,7 @@ export const appRouter = t.router({
             new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), CHAT_TITLE_TIMEOUT_MS)),
           ])
 
-          const text =
-            (completion as any)?.response?.candidates?.[0]?.content?.parts
-              ?.map((part: any) => part.text || "")
-              .join("")
-              ?.trim() || ""
+          const text = (completion as OpenAI.Chat.Completions.ChatCompletion)?.choices?.[0]?.message?.content?.trim() || ""
           const candidate = buildFallbackTitle(text || message)
 
           return { title: candidate }
@@ -508,32 +492,24 @@ export const appRouter = t.router({
         }
 
         try {
-          const completion = await visualClassifierModel.generateContent({
-            contents: [
+          // OPENAI IMPLEMENTATION
+          const completion = await openai.chat.completions.create({
+            model: OPENAI_MODEL,
+            messages: [
               {
                 role: "user",
-                parts: [
-                  {
-                    text: [
-                      "Return a single word `yes` or `no` indicating whether the user's query facilitates a data visualization (chart/graph) in the response.",
-                      "This can be through any sort of graph like a pie chart, bar chart, line graph, etc.",
-                      "The answer should always be 'yes' if the user is asking about an accession number. Most of the time visualizations are good.",
-                      `Question: ${question}`,
-                    ].join("\n"),
-                  },
-                ],
+                content: [
+                  "Return a single word `yes` or `no` indicating whether the user's query facilitates a data visualization (chart/graph) in the response.",
+                  "This can be through any sort of graph like a pie chart, bar chart, line graph, etc.",
+                  "The answer should always be 'yes' if the user is asking about an accession number. Most of the time visualizations are good.",
+                  `Question: ${question}`,
+                ].join("\n"),
               },
             ],
-            generationConfig: {
-              temperature: 0.4,
-            },
+            temperature: 0.4,
           })
 
-          const text =
-            completion.response.candidates?.[0]?.content?.parts
-              ?.map((part: any) => part.text || "")
-              .join("")
-              ?.toLowerCase() || ""
+          const text = completion.choices?.[0]?.message?.content?.toLowerCase() || ""
           const shouldVisualize = /yes|chart|graph/.test(text)
 
           return { shouldVisualize, raw: text }
@@ -560,39 +536,36 @@ export const appRouter = t.router({
         try {
           const promptContext = preview || stringifyForPrompt(raw, 3000)
 
-          const completion = await visualGeneratorModel.generateContent({
-            contents: [
+          // OPENAI IMPLEMENTATION
+          const completion = await openai.chat.completions.create({
+            model: OPENAI_MODEL,
+            messages: [
               {
                 role: "user",
-                parts: [
-                  {
-                    text: [
-                      "You create concise JSON chart specs for Recharts with a top-level `charts` array.",
-                      "Each chart has id, type (line|bar|area|pie|sankey), title, description, data (array of objects), xKey, yKeys (array of {key,label,color}), categoryKey, valueKey.",
-                      "Sankey charts instead use nodes (array of {id,name,color,description}) and links (array of {source,target,value,color}) to describe flows.",
-                      "When type is sankey, do not include data/xKey/yKeys/categoryKey/valueKey; provide only nodes and links.",
-                      "Each sankey node needs a unique string id and name (with an optional description string shown with the label); every link must reference those ids exactly (never indexes or labels) and must include a numeric value.",
-                      "For sankey nodes, include the most relevant timestamp or date from the case (e.g., admission time, procedure date) in the node name or description so the flow reads like a timeline.",
-                      "Drop any link that points to a missing node; always return at least two nodes for a sankey chart.",
-                      'Example sankey: {"charts":[{"id":"accession-flow","type":"sankey","title":"Accession flow","nodes":[{"id":"source","name":"Source"},{"id":"lab","name":"Lab"},{"id":"archive","name":"Archive"}],"links":[{"source":"source","target":"lab","value":120},{"source":"lab","target":"archive","value":95}]}]}',
-                      "Always provide a distinct hex color for every yKeys entry. Only include data you can derive from the provided context.",
-                      "Respond with strict JSON that follows this schema and contains only the `charts` key.",
-                      `User question: ${question}`,
-                      `Assistant reply: ${answer}`,
-                      `Context: ${promptContext || "(none)"}`,
-                    ].join("\n"),
-                  },
-                ],
+                content: [
+                  "You create concise JSON chart specs for Recharts with a top-level `charts` array.",
+                  "Each chart has id, type (line|bar|area|pie|sankey), title, description, data (array of objects), xKey, yKeys (array of {key,label,color}), categoryKey, valueKey.",
+                  "Sankey charts instead use nodes (array of {id,name,color,description}) and links (array of {source,target,value,color}) to describe flows.",
+                  "When type is sankey, do not include data/xKey/yKeys/categoryKey/valueKey; provide only nodes and links.",
+                  "Each sankey node needs a unique string id and name (with an optional description string shown with the label); every link must reference those ids exactly (never indexes or labels) and must include a numeric value.",
+                  "For sankey nodes, include the most relevant timestamp or date from the case (e.g., admission time, procedure date) in the node name or description so the flow reads like a timeline.",
+                  "Drop any link that points to a missing node; always return at least two nodes for a sankey chart.",
+                  'Example sankey:{"charts":[{"id":"accession-flow","type":"sankey","title":"Accession flow","nodes":[{"id":"source","name":"Source"},{"id":"lab","name":"Lab"},{"id":"archive","name":"Archive"}],"links":[{"source":"source","target":"lab","value":120},{"source":"lab","target":"archive","value":95}]}]}',
+                  "Always provide a distinct hex color for every yKeys entry. Only include data you can derive from the provided context.",
+                  "Respond with strict JSON that follows this schema and contains only the `charts` key.",
+                  `User question: ${question}`,
+                  `Assistant reply: ${answer}`,
+                  `Context: ${promptContext || "(none)"}`,
+                ].join("\n"),
               },
             ],
-            generationConfig: {
-              temperature: 0.2,
-              responseMimeType: "application/json",
-            },
+            temperature: 0.2,
+            response_format: { type: "json_object" },
           })
 
-          const content =
-            completion.response.candidates?.[0]?.content?.parts?.map((part: any) => part.text || "").join("") || "{}"
+          const content = completion.choices?.[0]?.message?.content || "{}"
+
+         
           let parsed: unknown
           try {
             parsed = JSON.parse(content)
