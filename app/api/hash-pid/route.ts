@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server"
+import { createAdminSupabase } from "@/lib/supabase/admin"
 const HASH_PID_API_KEY = process.env.HASH_PID_API_KEY
+const PATIENT_ID_MAP_TABLE = "patient_id_maps"
+const PATIENT_ID_MAP_TTL_MS = 5 * 60 * 1000
 
 type PayloadEntry = Record<string, unknown>
 
@@ -16,6 +19,9 @@ const readApiKey = (request: Request) => {
   return null
 }
 
+const readExecutionId = (request: Request) =>
+  request.headers.get("execution-id") || request.headers.get("x-execution-id")
+
 export async function POST(request: Request) {
   try {
     if (!HASH_PID_API_KEY) {
@@ -31,6 +37,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Body must be an array of objects" }, { status: 400 })
     }
 
+    const executionId = readExecutionId(request)
+    if (!executionId) {
+      return NextResponse.json({ error: "Missing execution-id header" }, { status: 400 })
+    }
+
+    const patientIdMap: Record<string, string> = {}
+    for (const entry of payload) {
+      for (const [key, value] of Object.entries(entry)) {
+        if (typeof value === "string" && value.trim().length > 0) {
+          patientIdMap[key] = value.trim()
+        }
+      }
+    }
+
+    const adminSupabase = createAdminSupabase()
+    const { error: upsertErr } = await adminSupabase
+      .from(PATIENT_ID_MAP_TABLE)
+      .upsert(
+        {
+          execution_id: executionId,
+          patient_id_map: patientIdMap,
+        },
+        { onConflict: "execution_id" },
+      )
+    if (upsertErr) {
+      return NextResponse.json({ error: "Failed to store patientId map" }, { status: 500 })
+    }
+
+    const cutoff = new Date(Date.now() - PATIENT_ID_MAP_TTL_MS).toISOString()
+    await adminSupabase.from(PATIENT_ID_MAP_TABLE).delete().lt("created_at", cutoff)
+
     const tokenizedPayload = payload.map((entry) => {
       const tokenizedEntry: Record<string, unknown> = {}
       for (const [key, value] of Object.entries(entry)) {
@@ -45,7 +82,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, tokenizedPayload })
   } catch (error) {
-    console.error("[hash-pid] failed", error)
     return NextResponse.json({ error: "Failed to tokenize payload" }, { status: 500 })
   }
 }
